@@ -1,0 +1,45 @@
+# One pinned harness release for the whole repository. `runtime/package.json`
+# restates the same version literally because the packaging scripts install it
+# outside this workspace, where a catalog reference has nothing to resolve
+# against; `pnpm run check:harness-pin` proves the two agree.
+catalog:
+  '@deepseek-ai/cordis': 4.0.1
+  '@deepseek-ai/dsh': 0.1.0-rc.6
+  '@deepseek-ai/dsh-host-apiproxy': 0.1.0-rc.6
+  '@deepseek-ai/dsh-invariants': 0.1.0-rc.6
+
+packages:
+  - app
+  # Deploy root of the desktop application: a pure dependency manifest naming
+  # the published harness release the .app ships. `pnpm deploy` materializes its
+  # closure from the registry, so nothing here mirrors a workspace graph.
+  - runtime
+
+# pnpm 10+ blocks any dependency shipping an install/build script until it is
+# explicitly reviewed here. Deny by default; allow only what the desktop needs.
+allowBuilds:
+  esbuild: true
+  # Cross-platform boundary for the persistent PTY backend, including ConPTY on Windows.
+  node-pty: true
+  # JSONL durability calls MoveFileExW with write-through publication on Windows.
+  koffi: true
+  # The desktop application's runtime: its install script fetches the Electron
+  # binary the .app is built around.
+  electron: true
+  # Pulled in by @earendil-works/pi-ai (optional LLM API backend); its lifecycle
+  # scripts are no-ops the desktop does not need.
+  '@google/genai': false
+  protobufjs: false
+  node-addon-require-builtin: false
+  # Reached through electron-builder. Its script downloads the Squirrel.Windows
+  # binaries, which neither the macOS disk-image nor the NSIS target uses.
+  electron-winstaller: false
+  # Restores the executable bit on node-pty's macOS spawn helper, which the
+  # persistent-terminal tools need in the shipped closure.
+  '@deepseek-ai/dsh-subprocess-local': true
+
+# Every harness package is pinned to one release this repository chooses
+# deliberately, so pnpm's release-age gate has nothing left to protect and its
+# generated per-package exclusion list would only churn on every bump.
+minimumReleaseAge: 0
+

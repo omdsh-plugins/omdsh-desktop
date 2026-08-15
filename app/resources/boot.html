@@ -1,0 +1,250 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'">
+<title>DeepSeek Harness</title>
+<style>
+  :root {
+    color-scheme: light dark;
+    --surface: #f6f6f7;
+    --text: #1b1b1f;
+    --muted: #6b6b76;
+    --accent: #4d6bfe;
+    --danger: #c0392b;
+    --panel: #ffffff;
+    --border: rgb(0 0 0 / 0.08);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --surface: #101014;
+      --text: #ececf1;
+      --muted: #9a9aa6;
+      --danger: #ff7a6b;
+      --panel: #1a1a20;
+      --border: rgb(255 255 255 / 0.09);
+    }
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  body {
+    display: grid;
+    place-items: center;
+    background: var(--surface);
+    color: var(--text);
+    font: 13px/1.5 -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif;
+    -webkit-user-select: none;
+    user-select: none;
+  }
+  main { width: min(420px, calc(100vw - 64px)); text-align: center; }
+  .mark {
+    width: 56px;
+    height: 56px;
+    margin: 0 auto 20px;
+    border-radius: 14px;
+    background: var(--accent);
+    display: grid;
+    place-items: center;
+    color: #fff;
+    font-size: 22px;
+    font-weight: 600;
+    letter-spacing: 0.5px;
+  }
+  h1 { font-size: 15px; font-weight: 600; margin: 0 0 6px; }
+  p { margin: 0; color: var(--muted); }
+  .track {
+    height: 2px;
+    margin: 22px auto 0;
+    width: 180px;
+    border-radius: 2px;
+    background: var(--border);
+    overflow: hidden;
+  }
+  .track::after {
+    content: "";
+    display: block;
+    height: 100%;
+    width: 40%;
+    border-radius: 2px;
+    background: var(--accent);
+    animation: slide 1.4s ease-in-out infinite;
+  }
+  @keyframes slide {
+    0% { transform: translateX(-100%); }
+    100% { transform: translateX(350%); }
+  }
+  .detail {
+    display: none;
+    margin-top: 18px;
+    padding: 12px 14px;
+    text-align: left;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    color: var(--muted);
+    font: 11px/1.55 ui-monospace, SFMono-Regular, Menlo, monospace;
+    white-space: pre-wrap;
+    word-break: break-word;
+    -webkit-user-select: text;
+    user-select: text;
+  }
+  .actions { display: none; margin-top: 20px; gap: 8px; justify-content: center; flex-wrap: wrap; }
+  a.button, button {
+    appearance: none;
+    padding: 6px 14px;
+    border-radius: 7px;
+    border: 1px solid var(--border);
+    background: var(--panel);
+    color: var(--text);
+    text-decoration: none;
+    font: inherit;
+    font-size: 12px;
+    cursor: default;
+  }
+  a.button.primary, button.primary { background: var(--accent); border-color: transparent; color: #fff; }
+  button.quiet { background: none; border-color: transparent; color: var(--muted); }
+  button.quiet.remove:hover { color: var(--danger); }
+  body.failed .track { display: none; }
+  body.failed .detail { display: block; }
+  body.failed .actions, body.waiting .actions { display: flex; }
+
+  .card {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 6px;
+    margin-bottom: 18px;
+  }
+  .row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 9px 10px;
+    border-radius: 7px;
+  }
+  .row + .row { border-top: 1px solid var(--border); border-radius: 0; }
+  .row .who { flex: 1; min-width: 0; }
+  .row .name { font-weight: 500; }
+  .row .where {
+    color: var(--muted);
+    font: 11px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .badge {
+    font-size: 11px;
+    color: var(--accent);
+    border: 1px solid var(--accent);
+    border-radius: 20px;
+    padding: 1px 8px;
+  }
+  .field { margin-bottom: 12px; }
+  .field label { display: block; font-size: 11px; color: var(--muted); margin-bottom: 4px; }
+  .field input[type="text"] {
+    width: 100%;
+    padding: 6px 9px;
+    border-radius: 7px;
+    border: 1px solid var(--border);
+    background: var(--surface);
+    color: var(--text);
+    font: inherit;
+    -webkit-user-select: text;
+    user-select: text;
+  }
+  .field .note { font-size: 11px; color: var(--muted); margin-top: 4px; }
+  .field .problem { font-size: 11px; color: var(--danger); margin-top: 4px; }
+  .pair { display: flex; gap: 12px; }
+  .pair .field { flex: 1; }
+  .toggle { display: flex; align-items: center; gap: 8px; font-size: 12px; }
+  .form-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 4px; }
+</style>
+</head>
+<body>
+<main>
+  <div class="mark">DS</div>
+  <h1 id="headline">Starting DeepSeek Harness</h1>
+  <p id="message">Preparing the agent runtime…</p>
+  <div class="track"></div>
+  <div class="detail" id="detail"></div>
+  <div class="actions" id="actions"></div>
+</main>
+
+<script>
+  const params = new URLSearchParams(location.search)
+  const state = params.get('state') ?? 'starting'
+
+  /** Ask the shell to run one action; the main process intercepts this scheme. */
+  function act(name, query) {
+    const search = query === undefined ? '' : `?${new URLSearchParams(query).toString()}`
+    location.href = `dsh-action:${name}${search}`
+  }
+
+  {
+    const headline = document.getElementById('headline')
+    const message = document.getElementById('message')
+    const note = params.get('note')
+    document.body.classList.add(state === 'failed' ? 'failed' : 'waiting')
+    if (state === 'failed') {
+      headline.textContent = 'The harness runtime could not start'
+      message.textContent = 'The log below is what the runtime reported.'
+      document.getElementById('detail').textContent = note ?? 'No reason was reported.'
+    } else if (state === 'restarting') {
+      headline.textContent = 'Restarting the harness runtime'
+      message.textContent = 'The runtime stopped and is being started again…'
+    } else if (state === 'stopped') {
+      headline.textContent = 'The harness runtime is not running'
+      message.textContent = 'Start it again.'
+    } else if (note !== null) {
+      // A slow boot with only a spinner looks stalled, so whatever the runtime
+      // reported about it is shown.
+      message.textContent = `${note}…`
+    }
+    renderActions(state)
+  }
+
+  /**
+   * Put the buttons this state answers to on screen.
+   *
+   * Every waiting state has them, not only a failure: a window with no way out
+   * of a boot that stalls leaves force-quitting as the only exit.
+   */
+  function renderActions(state) {
+    const waiting = state === 'starting' || state === 'restarting'
+    const buttons = [
+      ...state === 'failed' ? [['Try Again', 'retry', true]] : [],
+      ...state === 'stopped' ? [['Start', 'retry', true]] : [],
+      ...waiting ? [['Stop', 'cancel-start', false]] : [],
+      ['Reveal Log', 'open-log', false],
+      ['Quit', 'quit', false],
+    ]
+    const row = document.getElementById('actions')
+    for (const [label, name, primary] of buttons) {
+      const link = document.createElement('a')
+      link.className = primary ? 'button primary' : 'button'
+      link.href = `dsh-action:${name}`
+      link.textContent = label
+      row.append(link)
+    }
+  }
+
+  // Keys this surface answers itself. They mean something only while the shell
+  // is showing this page, which is what keeps them off the application menu,
+  // and each one drives the control it names so the pointer and the keyboard
+  // take the same path.
+  document.addEventListener('keydown', (event) => {
+    // Escape leaves whatever the window is waiting on.
+    if (event.key === 'Escape') {
+      const stop = document.querySelector('.actions a[href="dsh-action:cancel-start"]')
+      if (stop !== null) stop.click()
+      return
+    }
+    // Only while nothing else holds focus: a focused button already answers
+    // Enter with itself.
+    if (state === 'failed' && event.key === 'Enter' && event.target === document.body) {
+      document.querySelector('.actions a.primary').click()
+    }
+  })
+</script>
+</body>
+</html>

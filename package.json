@@ -1,0 +1,31 @@
+{
+  "name": "omdsh-desktop-workspace",
+  "description": "Workspace root for the DeepSeek Harness desktop application: the Electron shell and the packaging pipeline.",
+  "version": "0.1.0-rc.5",
+  "private": true,
+  "type": "module",
+  "license": "MIT",
+  "packageManager": "pnpm@11.7.0",
+  "engines": {
+    "node": "^22.19.0 || >=24.0.0"
+  },
+  "scripts": {
+    "build": "tsc --build tsconfig.json && pnpm --filter @omdsh-plugins/omdsh-desktop exec tsdown",
+    "typecheck": "tsc --build tsconfig.json --force && tsc --noEmit -p tsconfig.checks.json",
+    "test": "vitest run",
+    "package:desktop": "tsx scripts/package-desktop-app.ts",
+    "harness:local": "tsx scripts/harness-source.ts --local",
+    "harness:npm": "tsx scripts/harness-source.ts --npm",
+    "check:harness-pin": "tsx scripts/harness-source.ts --check",
+    "clean": "rm -rf app/lib dist-desktop *.tsbuildinfo"
+  },
+  "devDependencies": {
+    "@types/jsdom": "^27.0.0",
+    "@types/node": "^22.20.0",
+    "jsdom": "29.1.1",
+    "tsdown": "^0.22.2",
+    "tsx": "^4.22.4",
+    "typescript": "^6.0.3",
+    "vitest": "^4.1.8"
+  }
+}

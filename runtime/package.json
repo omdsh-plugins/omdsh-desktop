@@ -1,0 +1,11 @@
+{
+  "name": "omdsh-desktop-runtime-pkg",
+  "description": "Dependency-only deploy root for the desktop application's embedded harness runtime. Its dependencies are the published harness release the .app ships and the package manager that release shells out to; pnpm resolves the whole closure from the registry.",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@deepseek-ai/dsh": "0.1.0-rc.6",
+    "pnpm": "11.21.0"
+  }
+}

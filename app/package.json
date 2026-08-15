@@ -1,0 +1,21 @@
+{
+  "name": "@omdsh-plugins/omdsh-desktop",
+  "description": "DSH desktop application: an Electron shell that supervises an embedded dsh web runtime and adds the native surface around it",
+  "version": "0.1.0-rc.5",
+  "private": true,
+  "type": "module",
+  "main": "lib/main.mjs",
+  "author": "DeepSeek",
+  "files": [
+    "lib/*.mjs",
+    "resources"
+  ],
+  "license": "MIT",
+  "devDependencies": {
+    "@deepseek-ai/dsh-host-apiproxy": "catalog:",
+    "@types/node": "^22.20.0",
+    "electron": "^43.4.0",
+    "electron-builder": "^26.15.3",
+    "typescript": "^6.0.3"
+  }
+}
