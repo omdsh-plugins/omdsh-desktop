@@ -10,11 +10,11 @@ describe('surfaceFor', () => {
   })
 
 
-  it('carries the reason a start failed, and what a slow one is doing', () => {
-    expect(surfaceFor({ status: 'failed', reason: 'the host refused the key' }))
-      .toEqual({ kind: 'boot', state: 'failed', note: 'the host refused the key' })
-    expect(surfaceFor({ status: 'starting', attempt: 0, detail: 'installing' }))
-      .toEqual({ kind: 'boot', state: 'starting', note: 'installing' })
+  it('carries the reason a start failed, and says nothing about a slow one', () => {
+    expect(surfaceFor({ status: 'failed', reason: 'the runtime stopped 3 times in a row' }))
+      .toEqual({ kind: 'boot', state: 'failed', note: 'the runtime stopped 3 times in a row' })
+    // A start on this machine has no steps to narrate: the runtime is spawned
+    // and either reports its URL or exits.
     expect(surfaceFor({ status: 'starting', attempt: 0 }))
       .toEqual({ kind: 'boot', state: 'starting', note: '' })
   })

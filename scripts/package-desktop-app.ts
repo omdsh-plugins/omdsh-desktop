@@ -19,6 +19,7 @@
  *
  * Artifacts land in `dist-desktop/dist-mac` or `dist-desktop/dist-win`, one
  * directory per target, unless `--out` names another.
+ * @module @omdsh-plugins/omdsh-desktop/scripts/package-desktop-app
  */
 
 import { spawn, spawnSync } from 'node:child_process'

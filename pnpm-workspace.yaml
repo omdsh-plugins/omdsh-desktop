@@ -3,10 +3,8 @@
 # outside this workspace, where a catalog reference has nothing to resolve
 # against; `pnpm run check:harness-pin` proves the two agree.
 catalog:
-  '@deepseek-ai/cordis': 4.0.1
   '@deepseek-ai/dsh': 0.1.0-rc.6
   '@deepseek-ai/dsh-host-apiproxy': 0.1.0-rc.6
-  '@deepseek-ai/dsh-invariants': 0.1.0-rc.6
 
 packages:
   - app

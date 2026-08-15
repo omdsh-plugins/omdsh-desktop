@@ -1,14 +1,15 @@
 /**
  * Supervision of one `dsh --profile web` runtime: start, readiness, restart
- * pacing, and bounded shutdown. The runtime serves either from this machine or
- * from a host reached over SSH; which one is a property of the launch the
- * supervisor is handed, not of the supervision.
+ * pacing, and bounded shutdown.
  *
  * The runtime runs as a child rather than inside the main process so a harness
  * fault, a memory climb, or a wedged plugin tree costs a restart instead of the
- * window, and so its heap is sized independently of Chromium's. A remote
- * runtime keeps the same arrangement: the child is then the `ssh` session that
- * carries it, and its exit is the runtime's exit.
+ * window, and so its heap is sized independently of Chromium's.
+ *
+ * What the child IS stays a property of the launch this supervisor is handed
+ * rather than of the supervision — but there is one launch left, on this
+ * machine, and the comments here no longer describe a second one that does not
+ * exist.
  * @module @omdsh-plugins/omdsh-desktop/runtime-supervisor
  */
 
@@ -27,9 +28,8 @@ const SHUTDOWN_GRACE_MS = 8_000
 /**
  * Output kept from the current attempt so an exit can be explained.
  *
- * A remote launch reports what went wrong — a refused key, an unresolved host,
- * a missing remote launcher — as ordinary output, and the exit code alone
- * cannot tell those apart.
+ * A runtime that dies during boot says why on stderr and then exits; the exit
+ * code alone cannot tell a missing entry point from a wedged plugin.
  */
 const OUTPUT_TAIL_BYTES = 8 * 1024
 
@@ -37,12 +37,8 @@ const OUTPUT_TAIL_BYTES = 8 * 1024
 export type RuntimeState =
   /** No process, and none requested. */
   | { status: 'stopped' }
-  /**
-   * A process is running but has not reported its URL. `detail` carries what
-   * the launch says it is doing, when it says anything — a boot that
-   * a host the shell provisions spends minutes there before the runtime starts.
-   */
-  | { status: 'starting'; attempt: number; detail?: string }
+  /** A process is running but has not reported its URL yet. */
+  | { status: 'starting'; attempt: number }
   /** The runtime reported this URL and is serving. */
   | { status: 'ready'; url: string }
   /** The previous process exited; the next start is scheduled. */
@@ -55,16 +51,13 @@ export interface RuntimeSupervisorOptions {
   /**
    * Prepare the next launch.
    *
-   * Called once per start rather than once per supervisor, because a remote
-   * launch occupies a fresh pair of ports every time and because the person
-   * may have chosen a different host since the last one. Preparation can take
-   * minutes when it puts a server payload on a host, so it reports what it is
-   * doing through `report`.
-   * @param report - receives one short present-tense note per step.
+   * Called once per start rather than once per supervisor: the runtime asks the
+   * OS for a free port, so each attempt is a fresh command line rather than a
+   * replay of the last one.
    * @param signal - aborts when the start is cancelled, so work that runs before the child exists stops with it.
    * @returns the launch to spawn.
    */
-  prepareLaunch: (report: (detail: string) => void, signal: AbortSignal) => Promise<RuntimeLaunch>
+  prepareLaunch: (signal: AbortSignal) => Promise<RuntimeLaunch>
   /** Working directory of the runtime, which becomes a new session's default project directory. */
   cwd: string
   /** Environment for the runtime, already merged from the login shell. */
@@ -89,7 +82,6 @@ export class RuntimeSupervisor {
   private stopRequested = false
   private preparing = false
   private preparation: AbortController | undefined
-  private fatalReason: string | undefined
   private exitWaiters: (() => void)[] = []
   private ladderTimers: ReturnType<typeof setTimeout>[] = []
 
@@ -108,13 +100,7 @@ export class RuntimeSupervisor {
     return this.state.status === 'ready' ? this.state.url : undefined
   }
 
-  /**
-   * Process id of the running child, or `undefined` when none is running.
-   *
-   * For a remote launch this is the `ssh` session, whose resident memory says
-   * nothing about the runtime; the resource policy reads it only for a local
-   * one.
-   */
+  /** Process id of the running child, or `undefined` when none is running. */
   get pid(): number | undefined {
     return this.child?.pid
   }
@@ -142,8 +128,7 @@ export class RuntimeSupervisor {
 
   /**
    * Replace the running runtime. Sessions are durable, so a restart costs an
-   * in-flight turn and nothing else. Switching to another host is a restart:
-   * the next launch is prepared from the current choice.
+   * in-flight turn and nothing else.
    */
   async restart(): Promise<void> {
     await this.stop()
@@ -154,21 +139,18 @@ export class RuntimeSupervisor {
   /**
    * Stop the runtime and cancel any scheduled start.
    *
-   * A local runtime is asked with `SIGTERM`, which makes it dispose its own
-   * plugin tree and subprocesses. A remote one is asked by closing the `ssh`
-   * session's stdin, which its own script turns into the same `SIGTERM` on the
-   * far side; signalling `ssh` instead would leave that runtime orphaned.
-   * Windows has no `SIGTERM`: Node maps that signal to `TerminateProcess`, so
-   * a local runtime does not run its disposer and sessions survive because they
-   * are durable. Only when the child outlives the ladder does the escalation
-   * reach the process tree, which is what catches subprocesses that a wedged
-   * runtime never reaped.
+   * The runtime is asked with `SIGTERM`, which makes it dispose its own plugin
+   * tree and subprocesses. Windows has no `SIGTERM`: Node maps that signal to
+   * `TerminateProcess`, so the runtime does not run its disposer and sessions
+   * survive because they are durable. Only when the child outlives the ladder
+   * does the escalation reach the process tree, which is what catches
+   * subprocesses that a wedged runtime never reaped.
    */
   async stop(): Promise<void> {
     this.stopRequested = true
     this.clearRestartTimer()
     // Preparation runs before any child exists, so a cancel has to reach it
-    // launcher on the host — so stopping has to reach it there as well.
+    // through its own signal rather than through the process.
     this.preparation?.abort()
     const child = this.child
     if (child === undefined) {
@@ -187,9 +169,10 @@ export class RuntimeSupervisor {
    */
   private beginTermination(child: ChildProcess): void {
     if (this.ladderTimers.length > 0) return
-    const steps = this.launch?.stopsOnStdinEnd === true
-      ? [() => { child.stdin?.end() }, () => child.kill('SIGTERM'), () => { this.killGroup(child) }]
-      : [() => child.kill('SIGTERM'), () => { this.killGroup(child) }]
+    // SIGTERM, then the whole group. There used to be a third rung above it,
+    // closing an stdin pipe a remote launch script read as its stop signal;
+    // the only launch left ignores stdin.
+    const steps = [() => child.kill('SIGTERM'), () => { this.killGroup(child) }]
     const [first, ...rest] = steps
     first?.()
     this.ladderTimers = rest.map((step, index) =>
@@ -228,16 +211,13 @@ export class RuntimeSupervisor {
     this.preparing = true
     this.scanner = new ReadinessScanner()
     this.outputTail = ''
-    this.fatalReason = undefined
     this.startedAt = Date.now()
     this.publish({ status: 'starting', attempt })
     const preparation = new AbortController()
     this.preparation = preparation
     let launch: RuntimeLaunch
     try {
-      launch = await this.options.prepareLaunch((detail) => {
-        if (this.state.status === 'starting') this.publish({ status: 'starting', attempt, detail })
-      }, preparation.signal)
+      launch = await this.options.prepareLaunch(preparation.signal)
     } catch (error: unknown) {
       this.preparing = false
       this.preparation = undefined
@@ -260,7 +240,8 @@ export class RuntimeSupervisor {
       {
         cwd: this.options.cwd,
         env: { ...this.options.env, ...launch.env },
-        stdio: [launch.stdin, 'pipe', 'pipe'],
+        // The runtime reads nothing from stdin; only its output is consumed.
+        stdio: ['ignore', 'pipe', 'pipe'],
         // Its own process group, so shutdown can reach subprocesses as a unit.
         detached: true,
         windowsHide: true,
@@ -271,10 +252,6 @@ export class RuntimeSupervisor {
     child.stderr?.setEncoding('utf8')
     child.stdout?.on('data', (chunk: string) => { this.consume(chunk) })
     child.stderr?.on('data', (chunk: string) => { this.consume(chunk) })
-    // Swallows the EPIPE this pipe reports when the far side goes first: the
-    // shell never writes to it and holds it open only so that closing it is the
-    // stop signal, so the exit handler already owns what that means.
-    child.stdin?.on('error', () => {})
     child.once('error', (error) => {
       this.options.onOutput(`desktop: runtime failed to launch: ${error.message}\n`)
     })
@@ -290,24 +267,11 @@ export class RuntimeSupervisor {
     this.options.onOutput(chunk)
     this.outputTail = (this.outputTail + chunk).slice(-OUTPUT_TAIL_BYTES)
     const reported = this.scanner.push(chunk)
-    if (reported === undefined) {
-      // Only while starting: a note that arrived after the runtime is serving
-      // describes work the window is no longer waiting on.
-      if (this.state.status !== 'starting') return
-      const detail = this.launch?.progress?.(chunk)
-      if (detail !== undefined) this.publish({ status: 'starting', attempt: this.state.attempt, detail })
-      return
-    }
-    const address = this.launch?.address(reported) ?? { status: 'ready' as const, url: reported }
-    if (address.status === 'ready') {
-      this.publish({ status: 'ready', url: address.url })
-      return
-    }
-    // Restarting cannot fix a runtime that is serving somewhere else, so the
-    // exit handler publishes this reason instead of scheduling another attempt.
-    this.fatalReason = address.reason
-    const child = this.child
-    if (child !== undefined) this.beginTermination(child)
+    if (reported === undefined) return
+    // The runtime serves on this machine's loopback, so the address it reports
+    // is the address to reach it at. A launch that could serve from elsewhere
+    // used to translate this, and could answer that it was unreachable.
+    this.publish({ status: 'ready', url: reported })
   }
 
   /**
@@ -323,12 +287,6 @@ export class RuntimeSupervisor {
     const waiters = this.exitWaiters
     this.exitWaiters = []
     for (const resolve of waiters) resolve()
-    const fatal = this.fatalReason
-    this.fatalReason = undefined
-    if (fatal !== undefined) {
-      this.publish({ status: 'failed', reason: fatal })
-      return
-    }
     if (this.stopRequested) {
       this.publish({ status: 'stopped' })
       return

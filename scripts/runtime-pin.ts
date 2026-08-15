@@ -7,6 +7,7 @@
  * same line. A local-harness override replaces its specifier with a `link:`
  * (see `scripts/harness-source.ts`), which this module passes through
  * unchanged — the closure installer materializes whatever it resolves to.
+ * @module @omdsh-plugins/omdsh-desktop/scripts/runtime-pin
  */
 
 import { readFile } from 'node:fs/promises'

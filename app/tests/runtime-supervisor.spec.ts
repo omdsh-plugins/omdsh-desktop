@@ -26,8 +26,6 @@ process.stderr.write('cannot mount the plugin tree\\n')
 process.exit(3)
 `
 
-/** The ports a carried launch is tested against. */
-
 let directory: string
 
 beforeEach(async () => {

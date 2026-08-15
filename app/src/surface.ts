@@ -28,7 +28,7 @@ export function surfaceFor(state: RuntimeState | undefined): Surface {
     case 'failed':
       return { kind: 'boot', state: 'failed', note: state.reason }
     case 'starting':
-      return { kind: 'boot', state: 'starting', note: state.detail ?? '' }
+      return { kind: 'boot', state: 'starting', note: '' }
     case 'restarting':
     case 'stopped':
       return { kind: 'boot', state: state.status, note: '' }

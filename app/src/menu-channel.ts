@@ -104,9 +104,17 @@ export function followMenu(options: MenuChannelOptions): () => void {
       return
     }
     if (response.status === 404) {
-      // No plugin contributes a menu. That is a composition this shell serves
-      // — the platform's own menu — not a failure to report or retry into.
+      // No plugin contributes a menu right now. That is a composition this
+      // shell serves — the platform's own menu — so it is published rather
+      // than reported as a failure.
+      //
+      // But it is not necessarily permanent, so it is retried like any other
+      // answer. omdsh-shortcuts registers this route inside a `ctx.effect`,
+      // which means the route goes away and comes back whenever that plugin
+      // reloads; treating the 404 as terminal left the menu empty until the
+      // application was restarted.
       options.onDocument(EMPTY_DOCUMENT)
+      schedule()
       return
     }
     if (!response.ok || response.body === null) {

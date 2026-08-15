@@ -30,23 +30,13 @@ The local mode points `@deepseek-ai/dsh` and the API client at a harness checkou
 The runtime is the one beside the window, and that is the whole of it. Serving
 from another host, and every other capability beyond showing the harness, is
 the runtime's to grow through a plugin rather than something the shell reaches
-around it for. The closure builder in
-[`omdsh-remdev`](https://github.com/omdsh-plugins/omdsh-remdev) is still a build-time dependency of the
-packaging pipeline, but nothing in `app/` imports it.
+around it for. This repository depends on no sibling: the closure the packaging
+pipeline embeds is built by [`scripts/runtime-closure.ts`](scripts/runtime-closure.ts)
+here.
 
 ## The keyboard map
 
 Which chords the shell claims lives in [`omdsh-shortcuts`](https://github.com/omdsh-plugins/omdsh-shortcuts), a sibling repository: the application menu that carries the map, the window-level function row a menu item cannot hold, and the unit test that keeps both clear of the roles' chords and of the harness UI's own. This repository owns what those chords run — the windows, the runtime, the log — and the boot surface's own `Escape` and `Enter`, which mean something only while that page is on screen.
-
-## Building against the siblings
-
-`app/package.json` depends on both through `link:`, which pnpm does NOT build on install:
-
-```sh
-pnpm run build:remote     # build the sibling checkouts first
-pnpm run build:shortcut
-pnpm run build
-```
 
 ## Commands
 

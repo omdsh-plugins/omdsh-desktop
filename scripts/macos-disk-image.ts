@@ -1,6 +1,7 @@
 /**
  * The drag-to-install disk image both macOS packagers produce: the application
  * beside an `/Applications` symlink, compressed.
+ * @module @omdsh-plugins/omdsh-desktop/scripts/macos-disk-image
  */
 
 import { spawnSync } from 'node:child_process'

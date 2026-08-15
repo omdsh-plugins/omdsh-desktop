@@ -66,7 +66,6 @@ The boot surface is the one keyboard this repository holds, because its keys mea
 ## Known Limitations and Deferred Work
 
 - The runtime serves on loopback with an OS-assigned port and no authentication, which is the posture `dsh web` already has: any process running as the same user can reach the API. An Electron IPC carrier would remove the port, at the cost of reimplementing the plugin-bundle endpoint, the boot-manifest injection, and the downlink that the Web carrier already provides.
-- Every host needs Node 22.19 or newer; a registry installation also needs npm there. A host with neither is refused with a diagnosis rather than provisioned another way.
 - Stopping an idle runtime also stops whatever the schedule and job plugins would have run while it was idle. The menu checkbox turns the behavior off; a policy that distinguishes scheduled work from idleness is deferred.
 - The downlink pathnames are restated here because the constants live in a `packages/client` package, which the host TypeScript program deliberately cannot see.
 - The macOS bundle is ad-hoc signed, not notarized: a copy carried to another machine needs `xattr -dr com.apple.quarantine <app>`. The Windows setup is unsigned; SmartScreen will warn.

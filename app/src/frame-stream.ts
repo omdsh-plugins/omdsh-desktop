@@ -47,7 +47,15 @@ export function startFrameStream<F>(options: FrameStreamOptions<F>): () => void 
   let controller = new AbortController()
   let retryTimer: ReturnType<typeof setTimeout> | undefined
 
+  // The resolver is held so the disposer can SETTLE a pending retry, not only
+  // cancel its timer. Clearing the timeout alone leaves `run()` suspended on a
+  // promise nothing will ever resolve, and that suspension retains `options` —
+  // and through it the API client and the application's callbacks — for the
+  // life of the process. `closeStreams()` runs on every non-ready runtime
+  // transition, so a restart landing inside a retry window leaks one each time.
+  let wake: (() => void) | undefined
   const wait = (): Promise<void> => new Promise((resolve) => {
+    wake = resolve
     retryTimer = setTimeout(resolve, retryDelayMs)
   })
 
@@ -73,6 +81,8 @@ export function startFrameStream<F>(options: FrameStreamOptions<F>): () => void 
   return () => {
     stopped = true
     if (retryTimer !== undefined) clearTimeout(retryTimer)
+    // Resumes `run()`, which sees `stopped` and returns.
+    wake?.()
     controller.abort()
   }
 }

@@ -4,7 +4,7 @@
 
 macOS 与 Windows 桌面应用：一个 Electron 外壳，监管一个内嵌的 `dsh --profile web` 运行时，并在原生窗口中呈现它。它以未签名 `.dmg`（macOS）或 NSIS `.exe`（Windows）交付，由 [`scripts/package-desktop-app.ts`](../scripts/package-desktop-app.ts) 构建，且自包含——Electron 运行时、harness 依赖闭包与已构建的前端全部位于包内，因此安装后的应用不需要代码检出、不需要 Node 安装，也不需要包管理器。决策记录见 harness fork 的 `legacy/all-in-one` 分支上的 Agent Note `2026-08-13-electron-desktop-application`。
 
-外壳不新增任何 harness 能力。它通过运行时的本地回环服务器原样复用已发布的 Web 界面，只拥有浏览器标签页无法承担的部分：进程监管、用户的 shell 环境、原生窗口与菜单行为、提醒信号、一套内存策略，以及运行时在哪台主机上运行的选择。
+外壳不新增任何 harness 能力。它通过运行时的本地回环服务器原样复用已发布的 Web 界面，只拥有浏览器标签页无法承担的部分：进程监管、用户的 shell 环境、原生窗口与菜单行为、提醒信号、以及一套内存策略。
 
 
 ## 运行时进程
@@ -63,7 +63,7 @@ harness 窗口是本外壳并不扩展的网页内容，因此菜单未占用的
 
 [`src/resource-governor.ts`](src/resource-governor.ts) 每 30 秒采样一次运行时，并应用一套规则，其首要条款是绝不打断智能体工作：所有回收都只作用于空闲的运行时。空闲且十分钟内没有窗口打开的运行时会被停止，并在下次激活时重启；空闲且占用超过物理内存 35% 的运行时会原地重启。空闲停止在应用菜单中是一个复选项。
 
-## Known Limitations and Deferred Work
+## 已知限制与待办
 
 - 运行时在本地回环上以操作系统分配的端口提供服务且没有认证，这与 `dsh web` 已有的姿态一致：任何以同一用户身份运行的进程都能触及该 API。Electron IPC 载体可以去掉这个端口，代价是重新实现插件包端点、引导清单注入以及 Web 载体已经提供的下行通道。
 - 停止空闲运行时也会停掉调度与作业插件本可在空闲期间运行的工作。菜单复选项可关闭该行为；区分"被调度的工作"与"空闲"的策略暂缓。

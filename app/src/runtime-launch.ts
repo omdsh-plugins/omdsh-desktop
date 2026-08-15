@@ -30,13 +30,6 @@ const RUNTIME_PORT = '0'
  */
 const RUNTIME_NODE_FLAGS: readonly string[] = ['--expose-internals']
 
-/** What the runtime's readiness line leaves the shell able to do. */
-type RuntimeAddress =
-  /** Reach the runtime here. */
-  | { status: 'ready'; url: string }
-  /** The runtime is serving somewhere this shell cannot reach, and why. */
-  | { status: 'unusable'; reason: string }
-
 /** How one ended launch is described to the person who started it. */
 interface RuntimeExit {
   /** Exit code, or `null` when a signal ended it. */
@@ -49,7 +42,16 @@ interface RuntimeExit {
   attempts: number
 }
 
-/** One prepared launch of a runtime, wherever it serves from. */
+/**
+ * One prepared launch of the runtime.
+ *
+ * The interface used to describe a launch that could serve from somewhere
+ * else: an stdin pipe a remote script closed to stop, an address that might
+ * come back `unusable`, a progress note read out of a provisioning run. Remote
+ * launching is gone — {@link localRuntimeLaunch} is the only implementation,
+ * and it answered `'ignore'`, `false`, always-ready and nothing to those. What
+ * remains is what a launch on this machine actually varies.
+ */
 export interface RuntimeLaunch {
   /** Executable to spawn. */
   command: string
@@ -57,37 +59,14 @@ export interface RuntimeLaunch {
   args: readonly string[]
   /** Environment entries this launch adds to the shell's own launch environment. */
   env: Readonly<Record<string, string>>
-  /**
-   * stdin disposition. A remote launch holds a pipe open because closing it is
-   * how its remote script learns to end the runtime; a local launch has no use
-   * for one.
-   */
-  stdin: 'ignore' | 'pipe'
-  /** Whether closing stdin is this launch's graceful stop. */
-  stopsOnStdinEnd: boolean
   /** Name of what is being reached, for the log and the boot surface. */
   description: string
-  /**
-   * Turn the address the runtime reported into one this shell can reach.
-   * @param reported - the URL from the runtime's readiness line.
-   * @returns where to reach it, or why it cannot be reached.
-   */
-  address: (reported: string) => RuntimeAddress
   /**
    * Explain a launch that ended without being asked to.
    * @param exit - how it ended and what it printed.
    * @returns the complete reason, as the boot surface shows it.
    */
   explain: (exit: RuntimeExit) => string
-  /**
-   * Read a note about what the launch is doing out of its output.
-   *
-   * Only a launch that does work before the runtime starts has one; a first
-   * takes long enough that a window showing nothing looks stalled.
-   * @param chunk - decoded output from the launch, in arrival order.
-   * @returns the note, or `undefined` when the chunk carries none.
-   */
-  progress?: (chunk: string) => string | undefined
 }
 
 /**
@@ -128,10 +107,7 @@ export function localRuntimeLaunch(options: {
       RUNTIME_PORT,
     ],
     env: { ELECTRON_RUN_AS_NODE: '1' },
-    stdin: 'ignore',
-    stopsOnStdinEnd: false,
     description: 'this machine',
-    address: reported => ({ status: 'ready', url: reported }),
     explain: exit =>
       `the harness runtime stopped ${String(exit.attempts)} times in a row (${endingCause(exit)})`,
   }

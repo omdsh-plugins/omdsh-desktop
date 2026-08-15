@@ -17,17 +17,6 @@ describe('localRuntimeLaunch', () => {
       .toEqual({ ELECTRON_RUN_AS_NODE: '1' })
   })
 
-  it('reaches the runtime at the address it reported, because it is this machine', () => {
-    const launch = localRuntimeLaunch({ entry: 'e', nodePath: 'n', maxOldSpaceMb: 1 })
-    expect(launch.address('http://127.0.0.1:5321')).toEqual({ status: 'ready', url: 'http://127.0.0.1:5321' })
-  })
-
-  it('has no use for stdin, and is not stopped by closing it', () => {
-    const launch = localRuntimeLaunch({ entry: 'e', nodePath: 'n', maxOldSpaceMb: 1 })
-    expect(launch.stdin).toBe('ignore')
-    expect(launch.stopsOnStdinEnd).toBe(false)
-  })
-
   it('counts repeated failures, which is all a local exit says', () => {
     const launch = localRuntimeLaunch({ entry: 'e', nodePath: 'n', maxOldSpaceMb: 1 })
     expect(launch.explain({ exitCode: 3, signal: null, output: '', attempts: 4 }))

@@ -258,7 +258,7 @@ export class WindowHost {
    * Load the local boot surface with everything it renders.
    * @param window - the window to route.
    * @param state - the surface the page shows.
-   * @param note - what else the shell knows about this state: why a start failed, or what a slow one is doing.
+   * @param note - why a start failed; empty for every other state.
    */
   private routeBootPage(window: BrowserWindow, state: string, note: string): void {
     const key = `boot:${state}:${note}`

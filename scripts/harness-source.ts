@@ -13,6 +13,7 @@
  *
  * Run: `pnpm run harness:local ../../deepseek-harness`, `pnpm run harness:npm`,
  * or `pnpm run check:harness-pin` to prove the pinned versions agree.
+ * @module @omdsh-plugins/omdsh-desktop/scripts/harness-source
  */
 
 import { readFile, writeFile } from 'node:fs/promises'
@@ -108,12 +109,32 @@ async function useRegistry(): Promise<void> {
 }
 
 /**
- * Prove the runtime manifest and the catalog pin the same release.
+ * Prove the two manifests `harness:local` rewrites are both back on the pin.
  *
- * A checkout switched to a local harness is reported as such and passes: the
- * check exists to catch a drifted version, not to forbid local development.
+ * The two halves are held to DIFFERENT standards, and deliberately so.
+ *
+ * `runtime/package.json` is a deploy root: the packaging pipeline installs its
+ * closure and nobody else ever resolves it, so a `link:` there is reported and
+ * passes — the check exists to catch a drifted version, not to forbid local
+ * development.
+ *
+ * `app/package.json` is source that `tsc` compiles. A `link:` committed there
+ * is the silent failure CONVENTIONS rule 8 describes: pnpm resolves it against
+ * the declaring manifest, so on any other machine it becomes a dangling
+ * symlink, `install` reports success, and the build dies with TS2307 on every
+ * harness import. That one fails.
  */
 async function check(): Promise<void> {
+  const app = await readManifest(join(root, 'app', 'package.json'))
+  const apiproxy = app.devDependencies?.[APIPROXY_PACKAGE]
+  if (apiproxy === undefined) throw new Error(`${PREFIX}: app/package.json does not depend on ${APIPROXY_PACKAGE}.`)
+  if (apiproxy.startsWith('link:')) {
+    throw new Error(
+      `${PREFIX}: app/package.json links ${APIPROXY_PACKAGE} to a local checkout (${apiproxy}); `
+      + "run 'pnpm run harness:npm' before committing.",
+    )
+  }
+
   const runtime = await readManifest(join(root, 'runtime', 'package.json'))
   const pinned = runtime.dependencies?.[HARNESS_PACKAGE]
   if (pinned === undefined) throw new Error(`${PREFIX}: runtime/package.json does not depend on ${HARNESS_PACKAGE}.`)
@@ -125,7 +146,7 @@ async function check(): Promise<void> {
   if (pinned !== version) {
     throw new Error(`${PREFIX}: runtime/package.json pins ${pinned} but the catalog pins ${version}; they must name one release.`)
   }
-  console.log(`${PREFIX}: runtime and catalog both pin ${HARNESS_PACKAGE}@${version}.`)
+  console.log(`${PREFIX}: runtime and catalog both pin ${HARNESS_PACKAGE}@${version}, and app is on the catalog.`)
 }
 
 /**

@@ -153,8 +153,6 @@ export function processRssCommand(pid: number, platform: NodeJS.Platform = proce
 /**
  * Read one process's resident set size.
  *
- * The runtime is not an Electron child process, so `app.getAppMetrics()` does
- * not cover it and the operating system's own accounting is the only source.
  * @param pid - the process to measure.
  * @returns its resident set size in bytes, or `undefined` when the process is gone or unreadable.
  */

@@ -195,10 +195,6 @@
     } else if (state === 'stopped') {
       headline.textContent = 'The harness runtime is not running'
       message.textContent = 'Start it again.'
-    } else if (note !== null) {
-      // A slow boot with only a spinner looks stalled, so whatever the runtime
-      // reported about it is shown.
-      message.textContent = `${note}…`
     }
     renderActions(state)
   }

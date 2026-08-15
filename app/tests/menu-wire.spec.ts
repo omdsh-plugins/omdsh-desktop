@@ -46,7 +46,6 @@ async function publish(routes: {
   events?: (write: (chunk: string) => void) => void
   invoke?: (body: string) => number
 }): Promise<string> {
-  const invocations: string[] = []
   server = createServer((req, res) => {
     const path = new URL(req.url ?? '/', 'http://x').pathname
     if (path === MENU_EVENTS_PATH && routes.events !== undefined) {
@@ -58,7 +57,6 @@ async function publish(routes: {
       let body = ''
       req.on('data', chunk => { body += String(chunk) })
       req.on('end', () => {
-        invocations.push(body)
         res.writeHead(routes.invoke?.(body) ?? 200, { 'content-type': 'application/json' })
         res.end('{}')
       })

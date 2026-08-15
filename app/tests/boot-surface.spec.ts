@@ -64,14 +64,16 @@ function actions(document: Document): (string | null)[] {
 }
 
 describe('the boot surface', () => {
-  it('shows what a slow start is doing rather than only a spinner', () => {
-    const { document, errors } = render('starting', 'booting the harness')
+  it('leaves the starting message alone, having nothing to add to it', () => {
+    // A start on this machine narrates no steps, so the page keeps the wording
+    // it was served with rather than being handed a note to substitute.
+    const { document, errors } = render('starting', '')
     expect(errors).toEqual([])
-    expect(document.querySelector('#message')?.textContent).toBe('booting the harness…')
+    expect(document.querySelector('#message')?.textContent).toBe('Preparing the agent runtime…')
   })
 
   it('gives a slow start a way out, so a stall is not a force-quit', () => {
-    const { document } = render('starting', 'booting the harness')
+    const { document } = render('starting', '')
     expect(actions(document)).toEqual([
       'dsh-action:cancel-start',
       'dsh-action:open-log',
@@ -103,7 +105,7 @@ describe('the boot surface', () => {
   })
 
   it('stops a slow start on Escape, which is the way out of a boot that stalls', () => {
-    const { document, window } = render('starting', 'booting the harness')
+    const { document, window } = render('starting', '')
     const stop = document.querySelector('.actions a[href="dsh-action:cancel-start"]')
     if (stop === null) throw new Error('a starting surface offers no way out')
     const taken = clicks(stop)
