@@ -119,8 +119,14 @@ class DesktopApplication {
     this.windows.applyRuntimeState({ status: 'starting', attempt: 0 })
     this.windows.open()
 
-    this.registerAppEvents()
+    // AFTER the probe, not before: `activate` calls `runtime()`, which
+    // memoizes a supervisor around `launchEnvironment`. The probe is an
+    // `await`, so the event loop is free while it runs — a Dock click landing
+    // in that window would freeze the un-probed environment into the one
+    // supervisor the application ever builds, and a login shell's PATH would
+    // be missing for the rest of the session.
     await this.prepareEnvironment()
+    this.registerAppEvents()
     this.runtime().start()
     this.sampleTimer = setInterval(() => { void this.sampleResources() }, SAMPLE_INTERVAL_MS)
   }
