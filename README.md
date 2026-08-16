@@ -6,6 +6,17 @@ The [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) desktop 
 
 The shell is not part of the harness. It spawns the runtime as a child process and talks to it over loopback HTTP, so a runtime that crashes or exhausts its heap is restarted under a policy the shell owns, without taking the window with it.
 
+## ⬇️ Download
+
+| Platform | Installer |
+|---|---|
+| **macOS 13+, Apple silicon** | [DeepSeek-Harness-0.1.0-rc.6-arm64.dmg](https://github.com/omdsh-plugins/omdsh-desktop/releases/download/v0.1.0-rc.6/DeepSeek-Harness-0.1.0-rc.6-arm64.dmg) · 217 MB |
+| **Windows x64** | [DeepSeek-Harness-0.1.0-rc.6-x64-setup.exe](https://github.com/omdsh-plugins/omdsh-desktop/releases/download/v0.1.0-rc.6/DeepSeek-Harness-0.1.0-rc.6-x64-setup.exe) · 134 MB |
+
+Those two links are pinned to one build; **[the releases page](https://github.com/omdsh-plugins/omdsh-desktop/releases/latest)** always has the newest. Nothing else is needed on the machine — the harness runtime, the plugin hub and the mode system are inside the installer.
+
+Neither installer is signed with a paid developer certificate, so the system stops you once on first open: on macOS right-click the app in Applications → **Open** → **Open**; on Windows click **More info** → **Run anyway** on the SmartScreen dialog.
+
 [`app/README.md`](app/README.md) is that shell in detail — the runtime process and its restart ladder, the login-environment probe, window and menu behaviour, the attention streams, and the memory policy. This page is the repository around it.
 
 ## Layout

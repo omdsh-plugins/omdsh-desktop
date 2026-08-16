@@ -6,6 +6,17 @@
 
 这个外壳不属于 harness。它把运行时作为子进程拉起来，通过本地回环 HTTP 跟它说话，所以运行时崩了或者把堆吃光了，只是按外壳自己的策略重启一次，不会把窗口一起带走。
 
+## ⬇️ 下载
+
+| 平台 | 安装包 |
+|---|---|
+| **macOS 13 及以上，Apple 芯片** | [DeepSeek-Harness-0.1.0-rc.6-arm64.dmg](https://github.com/omdsh-plugins/omdsh-desktop/releases/download/v0.1.0-rc.6/DeepSeek-Harness-0.1.0-rc.6-arm64.dmg) · 217 MB |
+| **Windows 64 位** | [DeepSeek-Harness-0.1.0-rc.6-x64-setup.exe](https://github.com/omdsh-plugins/omdsh-desktop/releases/download/v0.1.0-rc.6/DeepSeek-Harness-0.1.0-rc.6-x64-setup.exe) · 134 MB |
+
+上面两个链接锁定的是某一次构建；**[发布页](https://github.com/omdsh-plugins/omdsh-desktop/releases/latest)** 上永远是最新的那一版。机器上不需要再装别的——harness 运行时、插件中心、模式系统都在安装包里。
+
+两个安装包都没有购买开发者证书签名，所以首次打开时系统会拦一下：macOS 在「应用程序」里右键点图标 →**打开**→ 再点一次**打开**；Windows 在 SmartScreen 弹窗上点**更多信息**→**仍要运行**。
+
 [`app/README.zh.md`](app/README.zh.md) 才是外壳本身的详细说明——运行时进程和它的重启阶梯、登录环境探测、窗口与菜单行为、提醒用的那几条流，以及内存策略。本页说的是它外面这个仓库。
 
 ## 目录结构
