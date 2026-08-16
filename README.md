@@ -62,7 +62,7 @@ The cost is real and worth naming: a shared library in the installer is pinned t
 
 Everything past these two is a plugin the hub can install, and the reasoning above is what a third would have to earn.
 
-Which bundles ship is declared as the `@omdsh-plugins/*` entries of the catalog, and `runtime/package.json` must name all of them at the same version — `omdsh-base` at `0.1.2` and `omdsh-plughub` at `0.1.3` today. Two files, for the reason the harness release is also stated twice: the closure installs outside this workspace, where a `catalog:` reference has nothing to resolve against.
+Which bundles ship is declared as the `@omdsh-plugins/*` entries of the catalog, and `runtime/package.json` must name all of them at the same version — `omdsh-base` at `0.1.3` and `omdsh-plughub` at `0.1.3` today. Two files, for the reason the harness release is also stated twice: the closure installs outside this workspace, where a `catalog:` reference has nothing to resolve against.
 
 ```sh
 pnpm run check:plugin-pin       # the runtime manifest and the catalog name one release
