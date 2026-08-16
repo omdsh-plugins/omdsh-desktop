@@ -40,6 +40,22 @@ const RUNTIME_PORT = '0'
  */
 const RUNTIME_NODE_FLAGS: readonly string[] = ['--expose-internals']
 
+/**
+ * Environment shared by every invocation of the packaged launcher.
+ *
+ * The runtime closure already pins and ships the pnpm version that plugin
+ * installs must use. A git-hosted plugin can declare another version in its
+ * `packageManager` field, and pnpm otherwise downloads and re-executes that
+ * version while preparing the package. Besides bypassing the reviewed runtime
+ * closure, that bootstrap cannot reliably materialize its package-manager
+ * store when Node is the Electron executable. `pmOnFail=ignore` keeps both the
+ * outer install and every nested `pnpm install` on the shipped pnpm.
+ */
+const RUNTIME_ENV: Readonly<Record<string, string>> = {
+  ELECTRON_RUN_AS_NODE: '1',
+  pnpm_config_pm_on_fail: 'ignore',
+}
+
 /** How one ended launch is described to the person who started it. */
 interface RuntimeExit {
   /** Exit code, or `null` when a signal ended it. */
@@ -116,7 +132,7 @@ export function localRuntimeLaunch(options: {
       '--port',
       RUNTIME_PORT,
     ],
-    env: { ELECTRON_RUN_AS_NODE: '1' },
+    env: RUNTIME_ENV,
     description: 'this machine',
     explain: exit =>
       `the harness runtime stopped ${String(exit.attempts)} times in a row (${endingCause(exit)})`,
@@ -158,6 +174,6 @@ export function profileInitCommand(options: { entry: string; nodePath: string })
   return {
     command: options.nodePath,
     args: [...RUNTIME_NODE_FLAGS, options.entry, '--profile', RUNTIME_PROFILE, '--dump-default-config'],
-    env: { ELECTRON_RUN_AS_NODE: '1' },
+    env: RUNTIME_ENV,
   }
 }

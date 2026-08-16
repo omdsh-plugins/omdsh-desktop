@@ -21,12 +21,82 @@
  * @module @omdsh-plugins/omdsh-desktop/scripts/runtime-closure
  */
 
-import { mkdir, rm, writeFile } from 'node:fs/promises'
+import { mkdir, readFile, rm, writeFile } from 'node:fs/promises'
 import { join, resolve, sep } from 'node:path'
 import { runCommand } from './run-command.ts'
 
 /** The closure's command directory, relative to its root. */
-export const CLOSURE_BIN_RELATIVE = join('node_modules', '.bin')
+export const CLOSURE_BIN_RELATIVE = 'node_modules/.bin'
+
+/** The published Win32 folder-dialog worker that needs the rc.6 IPC lifecycle fix. */
+export const DIRECTORY_PICKER_WORKER_RELATIVE = 'node_modules/@deepseek-ai/dsh-host-directory-picker-native/lib/worker.cjs'
+
+/**
+ * Repair the rc.6 worker's premature IPC disconnect.
+ *
+ * The worker first posts a non-terminal `showing` message. The published build
+ * disconnects after every post, so that first acknowledgement triggers its own
+ * disconnect handler and exits the process while the dialog is still open.
+ * Keep the channel alive for `showing` and disconnect only after `done` or
+ * `error`. Already-fixed input is returned unchanged; unfamiliar input fails
+ * loudly so a future upstream rewrite cannot silently reintroduce the broken
+ * installer payload.
+ * @param source - published `worker.cjs` contents.
+ * @returns worker contents with the terminal-message lifecycle applied.
+ */
+export function patchDirectoryPickerWorkerSource(source: string): string {
+  let patched = source
+  const unsafeStringDecode = [
+    '\tconst bytes = Buffer.from(koffi.view(address, 32768));',
+    '\tlet end = 0;',
+    '\twhile (end + 1 < bytes.length && bytes[end] !== 0) end += 2;',
+    '\treturn bytes.toString("utf16le", 0, end);',
+  ].join('\n')
+  if (!patched.includes('return koffi.decode.string16(address);')) {
+    if (!patched.includes(unsafeStringDecode)) {
+      throw new Error('the directory-picker worker no longer matches the reviewed rc.6 string decoder; update its packaging patch')
+    }
+    // A fixed 32 KiB view can cross the COM allocation's readable pages and
+    // fatally abort Electron. Koffi's NUL-terminated decoder reads only the
+    // WCHAR string, exactly matching SIGDN_FILESYSPATH's contract.
+    patched = patched.replace(unsafeStringDecode, '\treturn koffi.decode.string16(address);')
+  }
+
+  if (patched.includes('if (terminal && process.connected) process.disconnect();')) return patched
+
+  const lifecycleReplacements = [
+    ['const post = (message) => {', 'const post = (message, terminal = false) => {'],
+    ['if (process.connected) process.disconnect();', 'if (terminal && process.connected) process.disconnect();'],
+    ['\n\t\t});\n\t} catch (error) {', '\n\t\t}, true);\n\t} catch (error) {'],
+    ['\n\t\t});\n\t}\n})();\n//#endregion', '\n\t\t}, true);\n\t}\n})();\n//#endregion'],
+  ] as const
+
+  for (const [before, after] of lifecycleReplacements) {
+    if (!patched.includes(before)) {
+      throw new Error('the directory-picker worker no longer matches the reviewed rc.6 lifecycle; update its packaging patch')
+    }
+    patched = patched.replace(before, after)
+  }
+  return patched
+}
+
+/**
+ * Apply and verify the Windows folder-dialog lifecycle repair in a staged
+ * runtime closure.
+ * @param staging - closure root.
+ * @param prefix - diagnostic prefix for packaging failures.
+ */
+export async function patchDirectoryPickerWorker(staging: string, prefix: string): Promise<void> {
+  const path = join(staging, DIRECTORY_PICKER_WORKER_RELATIVE)
+  let source: string
+  try {
+    source = await readFile(path, 'utf8')
+  } catch (error: unknown) {
+    throw new Error(`${prefix}: the deployed closure is missing ${DIRECTORY_PICKER_WORKER_RELATIVE}.`, { cause: error })
+  }
+  const patched = patchDirectoryPickerWorkerSource(source)
+  if (patched !== source) await writeFile(path, patched)
+}
 
 /** The pnpm entry inside the closure, relative to {@link CLOSURE_BIN_RELATIVE}. */
 const PNPM_ENTRY_FROM_BIN = { win: '..\\pnpm\\bin\\pnpm.mjs', mac: '../pnpm/bin/pnpm.mjs' } as const
@@ -155,7 +225,7 @@ export function closureShims(platform: 'mac' | 'win', productName: string): Clos
  * @returns the path, relative to the closure root.
  */
 export function pnpmCommandRelative(platform: 'mac' | 'win'): string {
-  return join(CLOSURE_BIN_RELATIVE, platform === 'win' ? 'pnpm.cmd' : 'pnpm')
+  return `${CLOSURE_BIN_RELATIVE}/${platform === 'win' ? 'pnpm.cmd' : 'pnpm'}`
 }
 
 /**
@@ -165,7 +235,7 @@ export function pnpmCommandRelative(platform: 'mac' | 'win'): string {
  * @returns the path.
  */
 export function nodeCommandRelative(platform: 'mac' | 'win'): string {
-  return join(CLOSURE_BIN_RELATIVE, platform === 'win' ? 'node.cmd' : 'node')
+  return `${CLOSURE_BIN_RELATIVE}/${platform === 'win' ? 'node.cmd' : 'node'}`
 }
 
 /**

@@ -36,7 +36,7 @@ import { localRuntimeLaunch } from '../app/src/runtime-launch.ts'
 import { defaultHeapLimitMb } from '../app/src/resource-governor.ts'
 import { bundleNames, packLocalBundles } from './bundled-plugins.ts'
 import { runCommand } from './run-command.ts'
-import { installRuntimeClosure, nodeCommandRelative, pnpmCommandRelative, writeClosureShims } from './runtime-closure.ts'
+import { installRuntimeClosure, nodeCommandRelative, patchDirectoryPickerWorker, pnpmCommandRelative, writeClosureShims } from './runtime-closure.ts'
 import { readRuntimePin } from './runtime-pin.ts'
 import { createDiskImage } from './macos-disk-image.ts'
 
@@ -777,6 +777,10 @@ async function main(): Promise<void> {
   // Outside the deploy block: a `--skip-deploy` run reuses a closure that may
   // predate these shims, and writing them is idempotent.
   await writeClosureShims({ staging, platform, productName: PRODUCT_NAME, prefix: PREFIX, dryRun: false })
+  // rc.6's published Win32 dialog worker disconnects after its first
+  // non-terminal `showing` message. Keep this outside the deploy block too, so
+  // reusing a previously staged closure cannot put the crash back in the app.
+  await patchDirectoryPickerWorker(staging, PREFIX)
   // These two commands are artifacts, not details. `dsh plugin` spawns `pnpm`
   // by bare name and the plugin hub points the child's PATH at this directory;
   // the shipped pnpm is a `#!/usr/bin/env node` script and pnpm's own launcher

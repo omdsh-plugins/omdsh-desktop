@@ -243,7 +243,7 @@ describe('seedBundledPlugins', () => {
     const dshHome = home(root, [HUB])
     const link = join(dshHome, 'profiles', 'node_modules', ...HUB.split('/'))
     mkdirSync(join(dshHome, 'profiles', 'node_modules', '@omdsh-plugins'), { recursive: true })
-    symlinkSync(join(root, 'previous-app'), link)
+    symlinkSync(join(root, 'previous-app'), link, process.platform === 'win32' ? 'junction' : undefined)
 
     await seed({ runtimeRoot, home: dshHome, offered: [HUB] })
 

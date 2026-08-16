@@ -67,6 +67,9 @@ export async function runCommand(options: RunCommandOptions): Promise<void> {
   const child = spawn(options.command, [...options.args], {
     cwd: options.cwd,
     env: { ...process.env, ...options.extraEnv },
+    // pnpm and electron-builder are `.cmd` shims on Windows. They are shell
+    // scripts rather than PE executables, so Node cannot spawn them directly.
+    shell: process.platform === 'win32',
     // Nothing here is interactive: a step that stops to ask would hang a build
     // that no one is watching.
     stdio: ['ignore', 'pipe', 'pipe'],

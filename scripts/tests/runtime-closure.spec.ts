@@ -5,7 +5,7 @@
  */
 
 import { describe, expect, it } from 'vitest'
-import { closureShims, launcherFromBin, nodeCommandRelative, pnpmCommandRelative, posixNodeShim, windowsShim } from '../runtime-closure.ts'
+import { closureShims, launcherFromBin, nodeCommandRelative, patchDirectoryPickerWorkerSource, pnpmCommandRelative, posixNodeShim, windowsShim } from '../runtime-closure.ts'
 
 const PRODUCT = 'DeepSeek Harness'
 
@@ -107,5 +107,51 @@ describe('the commands packaging asserts', () => {
       const written = new Set(closureShims(platform, PRODUCT).map(shim => `node_modules/.bin/${shim.name}`))
       expect(written.has(nodeCommandRelative(platform))).toBe(true)
     }
+  })
+})
+
+describe('patchDirectoryPickerWorkerSource', () => {
+  const publishedWorker = [
+    'function readUtf16(koffi, address) {',
+    '\tconst bytes = Buffer.from(koffi.view(address, 32768));',
+    '\tlet end = 0;',
+    '\twhile (end + 1 < bytes.length && bytes[end] !== 0) end += 2;',
+    '\treturn bytes.toString("utf16le", 0, end);',
+    '}',
+    'const post = (message) => {',
+    '\tsend(message, () => {',
+    '\t\tif (process.connected) process.disconnect();',
+    '\t});',
+    '};',
+    '(async () => {',
+    '\ttry {',
+    '\t\tpost({',
+    '\t\t\tkind: "done"',
+    '\t\t});',
+    '\t} catch (error) {',
+    '\t\tpost({',
+    '\t\t\tkind: "error"',
+    '\t\t});',
+    '\t}',
+    '})();',
+    '//#endregion',
+  ].join('\n')
+
+  it('keeps IPC connected for showing and disconnects only on terminal messages', () => {
+    const patched = patchDirectoryPickerWorkerSource(publishedWorker)
+    expect(patched).toContain('return koffi.decode.string16(address);')
+    expect(patched).not.toContain('koffi.view(address, 32768)')
+    expect(patched).toContain('const post = (message, terminal = false) => {')
+    expect(patched).toContain('if (terminal && process.connected) process.disconnect();')
+    expect(patched.match(/}, true\);/g)).toHaveLength(2)
+  })
+
+  it('is idempotent for a closure reused with --skip-deploy', () => {
+    const patched = patchDirectoryPickerWorkerSource(publishedWorker)
+    expect(patchDirectoryPickerWorkerSource(patched)).toBe(patched)
+  })
+
+  it('rejects an unknown upstream lifecycle instead of shipping it unchecked', () => {
+    expect(() => patchDirectoryPickerWorkerSource('different worker')).toThrow(/no longer matches/)
   })
 })

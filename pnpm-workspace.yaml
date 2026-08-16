@@ -48,3 +48,5 @@ allowBuilds:
 # generated per-package exclusion list would only churn on every bump.
 minimumReleaseAge: 0
 
+patchedDependencies:
+  '@deepseek-ai/dsh-host-directory-picker-native@0.1.0-rc.6': patches/@deepseek-ai__dsh-host-directory-picker-native@0.1.0-rc.6.patch

@@ -9,7 +9,9 @@
 # supervisor restarts a runtime that has served for a minute with no delay.
 # Terminating either process alone leaves the other to be found on the next
 # scan, which is what raises "cannot be closed" while installed files stay
-# locked and the install stalls.
+# locked and the install stalls. `Get-Process` is used for discovery rather
+# than `tasklist` or CIM: both can take minutes when Windows' process inventory
+# provider is unhealthy, stalling every install before extraction even starts.
 #
 # Two properties matter more than the budget. Termination is unconditional:
 # a check that first probes and acts only on a positive result skips the close
@@ -52,11 +54,11 @@
 # an executable under the installation directory. Sets the given register to 0
 # when one is running.
 !macro dshFindAppProcess _RESULT
-  nsExec::Exec `"$CmdPath" /C tasklist /FI "IMAGENAME eq ${APP_EXECUTABLE_FILENAME}" /FO CSV /NH | "$SYSDIR\findstr.exe" /B /I /C:"\"${APP_EXECUTABLE_FILENAME}\""`
-  Pop ${_RESULT}
-  ${if} ${_RESULT} != 0
-  ${andIf} $R3 == 0
-    nsExec::Exec `"$PowerShellPath" -NoProfile -NonInteractive -Command "if ((Get-CimInstance -ClassName Win32_Process | ? {$$_.Path -and $$_.Path.StartsWith('$INSTDIR', 'CurrentCultureIgnoreCase')}).Count -gt 0) { exit 0 } else { exit 1 }"`
+  ${if} $R3 == 0
+    nsExec::Exec `"$PowerShellPath" -NoProfile -NonInteractive -Command "$$root='$INSTDIR'; if (@(Get-Process -ErrorAction SilentlyContinue | ? { ($$_.ProcessName + '.exe') -ieq '${APP_EXECUTABLE_FILENAME}' -or ($$_.Path -and $$_.Path.StartsWith($$root, 'CurrentCultureIgnoreCase')) }).Count -gt 0) { exit 0 } else { exit 1 }"`
+    Pop ${_RESULT}
+  ${else}
+    nsExec::Exec `"$CmdPath" /C tasklist /FI "IMAGENAME eq ${APP_EXECUTABLE_FILENAME}" /FO CSV /NH | "$SYSDIR\findstr.exe" /B /I /C:"\"${APP_EXECUTABLE_FILENAME}\""`
     Pop ${_RESULT}
   ${endIf}
 !macroend
@@ -64,10 +66,11 @@
 # Terminate this installation's processes by image name and by path, without
 # first asking whether any are running.
 !macro dshKillAppProcesses
-  nsExec::Exec `"$CmdPath" /C taskkill /F /T /IM "${APP_EXECUTABLE_FILENAME}"`
-  Pop $R2
   ${if} $R3 == 0
-    nsExec::Exec `"$PowerShellPath" -NoProfile -NonInteractive -Command "Get-CimInstance -ClassName Win32_Process | ? {$$_.Path -and $$_.Path.StartsWith('$INSTDIR', 'CurrentCultureIgnoreCase')} | % { Stop-Process -Id $$_.ProcessId -Force -ErrorAction SilentlyContinue }"`
+    nsExec::Exec `"$PowerShellPath" -NoProfile -NonInteractive -Command "$$root='$INSTDIR'; Get-Process -ErrorAction SilentlyContinue | ? { ($$_.ProcessName + '.exe') -ieq '${APP_EXECUTABLE_FILENAME}' -or ($$_.Path -and $$_.Path.StartsWith($$root, 'CurrentCultureIgnoreCase')) } | % { & '$SYSDIR\taskkill.exe' /F /T /PID $$_.Id | Out-Null }"`
+    Pop $R2
+  ${else}
+    nsExec::Exec `"$CmdPath" /C taskkill /F /T /IM "${APP_EXECUTABLE_FILENAME}"`
     Pop $R2
   ${endIf}
 !macroend

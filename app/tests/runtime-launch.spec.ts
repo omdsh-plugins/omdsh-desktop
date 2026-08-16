@@ -12,9 +12,9 @@ describe('localRuntimeLaunch', () => {
     expect(launch.args.slice(-6)).toEqual(['--profile', 'web', '--host', '127.0.0.1', '--port', '0'])
   })
 
-  it('runs it as Node rather than as an Electron shell', () => {
+  it('runs it as Node and keeps plugin installs on the pnpm shipped in the closure', () => {
     expect(localRuntimeLaunch({ entry: 'e', nodePath: 'n', maxOldSpaceMb: 1 }).env)
-      .toEqual({ ELECTRON_RUN_AS_NODE: '1' })
+      .toEqual({ ELECTRON_RUN_AS_NODE: '1', pnpm_config_pm_on_fail: 'ignore' })
   })
 
   it('counts repeated failures, which is all a local exit says', () => {
@@ -41,7 +41,8 @@ describe('profileInitCommand', () => {
     expect(profileOf(command.args)).toBe(profileOf(launch.args))
   })
 
-  it('runs it as Node rather than as an Electron shell', () => {
-    expect(profileInitCommand({ entry: 'e', nodePath: 'n' }).env).toEqual({ ELECTRON_RUN_AS_NODE: '1' })
+  it('uses the same packaged-runtime environment as the supervised launch', () => {
+    expect(profileInitCommand({ entry: 'e', nodePath: 'n' }).env)
+      .toEqual(localRuntimeLaunch({ entry: 'e', nodePath: 'n', maxOldSpaceMb: 1 }).env)
   })
 })
