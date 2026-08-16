@@ -1,4 +1,4 @@
-# `@omdsh-plugins/omdsh-desktop`
+# @omdsh-plugins/omdsh-desktop
 
 [English](README.md) | 中文
 
@@ -19,6 +19,17 @@ macOS 与 Windows 桌面应用：一个 Electron 外壳，监管一个内嵌的 
 | 重启 | [`src/restart-policy.ts`](src/restart-policy.ts) 对已正常服务过的运行立即重启，对启动期失败按指数退避，连续五次后停止。会话是持久的，因此一次重启的代价仅是一个进行中的回合。 |
 | 关闭 | 运行时收到 `SIGTERM`，由它在自身的五秒上限内释放插件树与子进程；Windows 没有 `SIGTERM`，改为终止该进程。只有在阶梯的宽限期之后才向进程树发信号（Windows 上为 `taskkill /T`），这一步捕获的是卡死运行时未回收的子进程。 |
 | 日志 | Electron 的日志目录：macOS 上为 `~/Library/Logs/DeepSeek Harness/runtime.log`，Windows 上为 `%APPDATA%\DeepSeek Harness\logs\runtime.log`；每次运行清空，达到 4 MiB 时轮转。 |
+
+## 安装程序随身带的插件
+
+[`src/bundled-plugins.ts`](src/bundled-plugins.ts) 在监管器启动之前跑一次，把这次构建交付的 bundle 提供给 profile——今天是插件中心，也就是那个唯一没法用它自己提供的机制装上的插件。交付了哪些 bundle 是在闭包里发现的，而不是在这里列出来的，所以新增一个就只是 `runtime/package.json` 的一条依赖，再无其他。
+
+| 关注点 | 行为 |
+|---|---|
+| profile | 由启动器写，不由这里写：它不存在时，启动器会被以 `--dump-default-config` 跑一次，那会解析它然后退出。另一条路是自带一份模板副本，而那份模板里的 pnpm 设置决定了 hub 自己的安装行为。 |
+| 解析 | bundle patch 里那些行是从 **profile** 目录解析的，不是从闭包，所以交付的那份副本被软链进 `$DSH_HOME/profiles/node_modules`——启动器那个只增不删的扁平兜底目录。这条链每次启动都维护，因为换掉应用就是换掉链所指的东西。 |
+| 撤除 | 每个 bundle 只提供一次。store 记着提供过什么，所以用户从 `dsh.profile.bundles` 里拿掉的那个会一直保持拿掉的状态，不会下次启动又冒出来。hub 自己会把被 seed 的 bundle 标成不可移除——它移除的是依赖，而被 seed 的 bundle 是 profile 被给予的一层——那正是启动器自带 bundle 所在的那一档。 |
+| 安全 | 一个被列出、却哪里都解析不到的 bundle 会让启动器直接死掉，所以这次构建不再带的那个会被从列表里摘掉；而一个没有声明 `dsh.bundle` 的包根本不会被写进去。其余任何失败都原样留下 profile，并在日志里说清楚。 |
 
 ## 用户环境
 
@@ -63,7 +74,7 @@ harness 窗口是本外壳并不扩展的网页内容，因此菜单未占用的
 
 [`src/resource-governor.ts`](src/resource-governor.ts) 每 30 秒采样一次运行时，并应用一套规则，其首要条款是绝不打断智能体工作：所有回收都只作用于空闲的运行时。空闲且十分钟内没有窗口打开的运行时会被停止，并在下次激活时重启；空闲且占用超过物理内存 35% 的运行时会原地重启。空闲停止在应用菜单中是一个复选项。
 
-## 已知限制与待办
+## 已知限制
 
 - 运行时在本地回环上以操作系统分配的端口提供服务且没有认证，这与 `dsh web` 已有的姿态一致：任何以同一用户身份运行的进程都能触及该 API。Electron IPC 载体可以去掉这个端口，代价是重新实现插件包端点、引导清单注入以及 Web 载体已经提供的下行通道。
 - 停止空闲运行时也会停掉调度与作业插件本可在空闲期间运行的工作。菜单复选项可关闭该行为；区分"被调度的工作"与"空闲"的策略暂缓。

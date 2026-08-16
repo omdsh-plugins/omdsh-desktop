@@ -34,8 +34,9 @@ import { RUNTIME_DIRECTORY, RUNTIME_ENTRY_RELATIVE } from '../app/src/paths.ts'
 import { ReadinessScanner } from '../app/src/readiness.ts'
 import { localRuntimeLaunch } from '../app/src/runtime-launch.ts'
 import { defaultHeapLimitMb } from '../app/src/resource-governor.ts'
+import { bundleNames, packLocalBundles } from './bundled-plugins.ts'
 import { runCommand } from './run-command.ts'
-import { installRuntimeClosure } from './runtime-closure.ts'
+import { CLOSURE_BIN_RELATIVE, installRuntimeClosure, writeWindowsPnpmShim } from './runtime-closure.ts'
 import { readRuntimePin } from './runtime-pin.ts'
 import { createDiskImage } from './macos-disk-image.ts'
 
@@ -747,9 +748,23 @@ async function main(): Promise<void> {
   else {
     const pin = await readRuntimePin(root)
     console.log(`${PREFIX}: embedding the harness runtime ${pin.release}`)
+    // Before the closure install, because what it repoints is the map that
+    // install resolves: a bundle left as a `link:` would be symlinked into a
+    // tree that is about to be copied into an application.
+    const dependencies = await packLocalBundles({
+      dependencies: pin.dependencies,
+      manifestDir: join(root, 'runtime'),
+      destination: join(outputDir, 'bundles'),
+      prefix: PREFIX,
+      dryRun: false,
+    })
+    const carried = bundleNames(dependencies)
+    console.log(carried.length === 0
+      ? `${PREFIX}: this build carries no omdsh bundle — run 'pnpm run plugins:local <checkouts>' or 'pnpm run plugins:npm' to ship one`
+      : `${PREFIX}: carrying ${carried.join(', ')}`)
     await installRuntimeClosure({
       staging,
-      dependencies: pin.dependencies,
+      dependencies,
       ...pin.pnpm !== undefined && { pnpm: pin.pnpm },
       protect: root,
       prefix: PREFIX,
@@ -759,7 +774,19 @@ async function main(): Promise<void> {
   }
   await installTargetNatives(staging, platform, arch)
   await pruneForeignNatives(staging, platform, arch)
-  for (const required of [RUNTIME_ENTRY_RELATIVE, RUNTIME_FRONTEND]) {
+  // Outside the deploy block: a `--skip-deploy` run reuses a closure that may
+  // predate this shim, and writing it is idempotent.
+  if (platform === 'win') {
+    await writeWindowsPnpmShim({ staging, executableName: `${PRODUCT_NAME}.exe`, prefix: PREFIX, dryRun: false })
+  }
+  // The pnpm command is an artifact, not a detail. `dsh plugin` spawns `pnpm`
+  // by bare name and the plugin hub points the child's PATH at this directory,
+  // so a closure that lost it ships a hub whose every Install button fails —
+  // which is invisible until somebody opens Settings on a machine that has
+  // never had pnpm. It went missing once already, to `fs.cp` resolving the
+  // symlink, and the build gave no sign.
+  const pnpmCommand = join(CLOSURE_BIN_RELATIVE, platform === 'win' ? 'pnpm.cmd' : 'pnpm')
+  for (const required of [RUNTIME_ENTRY_RELATIVE, RUNTIME_FRONTEND, pnpmCommand]) {
     if (!existsSync(join(staging, required))) throw new Error(`${PREFIX}: the deployed closure is missing ${required}.`)
   }
   for (const marker of nativeMarkers(platform, arch)) {
@@ -797,7 +824,15 @@ async function main(): Promise<void> {
   // macOS, so the staged bytes are covered by the signature.
   const staged = join(resourcesDirectory(appPath, platform), RUNTIME_DIRECTORY)
   await rm(staged, { recursive: true, force: true })
-  await cp(staging, staged, { recursive: true, preserveTimestamps: true })
+  // `verbatimSymlinks` because the closure's `node_modules/.bin` shims are
+  // RELATIVE symlinks into the tree being copied, and the default resolves
+  // them against the destination — which turns each one into an absolute path
+  // back to this staging directory. That link is dangling on every machine but
+  // this one, and macOS refuses to sign a bundle containing it at all
+  // ("invalid destination for symbolic link in bundle"). The shims matter:
+  // `dsh plugin` shells out to `pnpm` by bare name, and `<closure>/node_modules
+  // /.bin` is where the plugin hub looks for the one this application ships.
+  await cp(staging, staged, { recursive: true, preserveTimestamps: true, verbatimSymlinks: true })
   if (!existsSync(join(staged, RUNTIME_ENTRY_RELATIVE))) throw new Error(`${PREFIX}: staging the closure did not produce ${RUNTIME_ENTRY_RELATIVE}.`)
   if (platform === 'mac') signAdHoc(appPath)
   console.log(`${PREFIX}: app: ${appPath} (${formatMib(await treeSize(appPath))})`)

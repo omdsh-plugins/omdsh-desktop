@@ -56,6 +56,29 @@ export class SettingsStore {
     this.write({ ...this.read(), idleSuspend: enabled })
   }
 
+  /**
+   * Bundles this shell has already offered to the harness profile.
+   *
+   * Kept here rather than in the profile because it records what this
+   * application DID, not what the profile holds: a bundle that appears in
+   * neither is one the user removed, and telling the two apart is the whole
+   * reason a shipped plugin can be uninstalled and stay uninstalled.
+   * @returns the recorded names, or none when the file holds no usable list.
+   */
+  readOfferedBundles(): string[] {
+    const stored = this.read().offeredBundles
+    if (!Array.isArray(stored)) return []
+    return stored.filter((entry): entry is string => typeof entry === 'string')
+  }
+
+  /**
+   * Remember which bundles have been offered.
+   * @param names - the complete list, replacing whatever was stored.
+   */
+  writeOfferedBundles(names: readonly string[]): void {
+    this.write({ ...this.read(), offeredBundles: [...names] })
+  }
+
 
   /**
    * The stored document, parsed once.

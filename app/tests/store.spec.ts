@@ -69,7 +69,31 @@ describe('SettingsStore', () => {
     expect(store.readIdleSuspend()).toBe(true)
   })
 
+  it('has offered no bundle before one is recorded', () => {
+    expect(new SettingsStore(path).readOfferedBundles()).toEqual([])
+  })
 
+  it('remembers the bundles it has offered, which is what keeps a withdrawal withdrawn', () => {
+    const store = new SettingsStore(path)
+    store.writeOfferedBundles(['@omdsh-plugins/omdsh-plughub'])
+    expect(new SettingsStore(path).readOfferedBundles()).toEqual(['@omdsh-plugins/omdsh-plughub'])
+  })
 
+  it('keeps the other preferences when the offered list is written', () => {
+    const store = new SettingsStore(path)
+    store.writeIdleSuspend(false)
+    store.writeOfferedBundles(['@omdsh-plugins/omdsh-plughub'])
+    expect(new SettingsStore(path).readIdleSuspend()).toBe(false)
+  })
 
+  it('reads a damaged list as none rather than trusting its entries', async () => {
+    await writeFile(join(directory, 'damaged.json'), '{"offeredBundles":{"not":"a list"}}')
+    expect(new SettingsStore(join(directory, 'damaged.json')).readOfferedBundles()).toEqual([])
+  })
+
+  it('drops non-string entries, which no launch should be asked to resolve', async () => {
+    await writeFile(join(directory, 'mixed.json'), '{"offeredBundles":["@omdsh-plugins/omdsh-plughub",7,null]}')
+    expect(new SettingsStore(join(directory, 'mixed.json')).readOfferedBundles())
+      .toEqual(['@omdsh-plugins/omdsh-plughub'])
+  })
 })

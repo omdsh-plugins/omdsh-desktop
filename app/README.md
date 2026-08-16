@@ -1,4 +1,4 @@
-# `@omdsh-plugins/omdsh-desktop`
+# @omdsh-plugins/omdsh-desktop
 
 English | [中文](README.zh.md)
 
@@ -19,6 +19,17 @@ The shell adds no harness capability. It reuses the shipped Web surface verbatim
 | Restart | [`src/restart-policy.ts`](src/restart-policy.ts) restarts a served run at once, backs off exponentially through startup failures, and stops after five in a row. Sessions are durable, so a restart costs an in-flight turn and nothing else. |
 | Shutdown | The runtime is asked with `SIGTERM`, which disposes its own plugin tree and subprocesses within its own five-second bound; Windows has no `SIGTERM` and terminates the process instead. The process tree is signalled only after the ladder's grace (`taskkill /T` on Windows), which is what catches subprocesses a wedged runtime never reaped. |
 | Log | Electron's logs directory: `~/Library/Logs/DeepSeek Harness/runtime.log` on macOS, `%APPDATA%\DeepSeek Harness\logs\runtime.log` on Windows; truncated per run and rotated at 4 MiB. |
+
+## The plugins the installer carries
+
+[`src/bundled-plugins.ts`](src/bundled-plugins.ts) runs once before the supervisor starts, and offers the profile the bundles this build ships — today the plugin hub, which is the one plugin that cannot be installed by the mechanism it provides. Which bundles those are is discovered in the closure rather than listed here, so adding one is a `runtime/package.json` dependency and nothing else.
+
+| Concern | Behavior |
+|---|---|
+| The profile | Written by the launcher, not here: when it is absent the launcher is run once with `--dump-default-config`, which resolves it and exits. The alternative was a copy of its template, whose pnpm settings decide how the hub's own installs behave. |
+| Resolution | A bundle patch's rows resolve from the PROFILE directory, not the closure, so the shipped copy is symlinked into `$DSH_HOME/profiles/node_modules` — the launcher's flat fallback, which it only ever adds to. Maintained on every launch, because replacing the application replaces what the link points at. |
+| Withdrawal | Each bundle is offered once. The store records what was offered, so one the user took out of `dsh.profile.bundles` stays out rather than reappearing on the next launch. The hub itself lists a seeded bundle as not removable — it removes dependencies, and a seeded bundle is a layer the profile was given — which is the tier the launcher's own bundles sit in. |
+| Safety | A listed bundle that resolves nowhere stops the launcher dead, so one this build no longer carries is dropped from the list; and a shipped package that declares no `dsh.bundle` is never listed at all. Every other failure leaves the profile untouched and says so in the log. |
 
 ## The user's environment
 
@@ -63,7 +74,7 @@ The boot surface is the one keyboard this repository holds, because its keys mea
 
 [`src/resource-governor.ts`](src/resource-governor.ts) samples the runtime every 30 seconds and applies one rule set whose first clause is that agent work is never interrupted: every reclamation applies to an idle runtime only. An idle runtime with no window open for ten minutes is stopped and restarted on the next activation; an idle runtime holding more than 35% of physical memory is restarted in place. Idle stopping is a checkbox in the application menu.
 
-## Known Limitations and Deferred Work
+## Known limitations
 
 - The runtime serves on loopback with an OS-assigned port and no authentication, which is the posture `dsh web` already has: any process running as the same user can reach the API. An Electron IPC carrier would remove the port, at the cost of reimplementing the plugin-bundle endpoint, the boot-manifest injection, and the downlink that the Web carrier already provides.
 - Stopping an idle runtime also stops whatever the schedule and job plugins would have run while it was idle. The menu checkbox turns the behavior off; a policy that distinguishes scheduled work from idleness is deferred.

@@ -15,6 +15,7 @@
  */
 
 import { app, Menu, Notification, powerSaveBlocker, shell } from 'electron'
+import { execFile } from 'node:child_process'
 import { homedir, totalmem } from 'node:os'
 import { join } from 'node:path'
 import type { HostFrame, MuxFrame } from '@deepseek-ai/dsh-host-apiproxy/api/events'
@@ -35,7 +36,8 @@ import {
   needsLoginEnvironment,
   readLoginShellEnvironment,
 } from './login-environment.ts'
-import { resolveRuntimeEntry } from './paths.ts'
+import { resolveHome, seedBundledPlugins } from './bundled-plugins.ts'
+import { resolveRuntimeEntry, resolveRuntimeRoot } from './paths.ts'
 import {
   decideResourceAction,
   defaultHeapLimitMb,
@@ -48,7 +50,7 @@ import { EMPTY_DOCUMENT, type MenuDocument, type ShellCommand } from './menu-con
 import { followMenu, invokeRuntimeCommand } from './menu-channel.ts'
 import { buildMenuTemplate } from './native-menu.ts'
 import { openRuntimeLog, type RuntimeLog } from './runtime-log.ts'
-import { localRuntimeLaunch, type RuntimeLaunch } from './runtime-launch.ts'
+import { localRuntimeLaunch, profileInitCommand, type RuntimeLaunch } from './runtime-launch.ts'
 import { RuntimeSupervisor, type RuntimeState } from './runtime-supervisor.ts'
 import { SettingsStore } from './store.ts'
 import { WindowHost } from './windows.ts'
@@ -71,6 +73,14 @@ const FOCUS_SETTLE_MS = 400
 /** Fallback login shell when the launch environment names none. */
 const FALLBACK_SHELL = '/bin/zsh'
 
+/**
+ * How long the one-shot profile initialization may take before the launch
+ * proceeds without it. It resolves the profile and exits — a third of a second
+ * on a warm machine — so this bound exists to keep a wedged child off the
+ * first window, not to accommodate slow ones.
+ */
+const PROFILE_INIT_TIMEOUT_MS = 20_000
+
 /** Owns the application's whole lifetime. */
 class DesktopApplication {
   private readonly settings = new SettingsStore(join(app.getPath('userData'), SETTINGS_FILENAME))
@@ -84,6 +94,7 @@ class DesktopApplication {
   private menuStream: (() => void) | undefined
   private menuDocument: MenuDocument = EMPTY_DOCUMENT
   private runtimeEntry = ''
+  private runtimeRoot = ''
   private maxOldSpaceMb = 0
   private powerBlockerId: number | undefined
   private sampleTimer: ReturnType<typeof setInterval> | undefined
@@ -126,6 +137,11 @@ class DesktopApplication {
     // supervisor the application ever builds, and a login shell's PATH would
     // be missing for the rest of the session.
     await this.prepareEnvironment()
+    // BEFORE `registerAppEvents`, for the reason the probe is: `activate`
+    // starts the runtime, and a runtime that started while the profile was
+    // half-seeded would compose a tree this launch had already decided to
+    // change.
+    await this.seedProfile()
     this.registerAppEvents()
     this.runtime().start()
     this.sampleTimer = setInterval(() => { void this.sampleResources() }, SAMPLE_INTERVAL_MS)
@@ -174,14 +190,62 @@ class DesktopApplication {
     this.log.write(probe === undefined
       ? 'desktop: using the inherited environment\n'
       : 'desktop: recovered the login shell environment\n')
-    const entry = resolveRuntimeEntry({
+    const layout = {
       packaged: app.isPackaged,
       resourcesPath: process.resourcesPath,
       appPath: app.getAppPath(),
-    })
-    this.runtimeEntry = entry
+    }
+    this.runtimeEntry = resolveRuntimeEntry(layout)
+    this.runtimeRoot = resolveRuntimeRoot(layout)
     this.maxOldSpaceMb = defaultHeapLimitMb()
     this.launchEnvironment = mergeLaunchEnvironment(inherited, probe)
+  }
+
+  /**
+   * Offer the bundles this application ships to the profile it is about to
+   * boot.
+   *
+   * Nothing here is allowed to stop the application. The seeding module
+   * reports its own refusals; this method's own failure mode is the profile
+   * initialization below, which is a child process and can fail for reasons
+   * that have nothing to do with plugins.
+   */
+  private async seedProfile(): Promise<void> {
+    try {
+      const outcome = await seedBundledPlugins({
+        runtimeRoot: this.runtimeRoot,
+        home: resolveHome(this.launchEnvironment),
+        offered: this.settings.readOfferedBundles(),
+        initProfile: () => this.initProfile(),
+        log: message => { this.log.write(message) },
+      })
+      this.settings.writeOfferedBundles(outcome.offered)
+    } catch (error) {
+      this.log.write(`desktop: seeding the profile failed: ${String(error)}\n`)
+    }
+  }
+
+  /**
+   * Let the launcher materialize the profile this shell boots.
+   *
+   * Run only when the profile is absent, and awaited because the manifest it
+   * writes is what the seeding step edits next. A failure resolves rather than
+   * throws: the launch that follows will report it far better than a boot
+   * screen citing a plugin can.
+   */
+  private async initProfile(): Promise<void> {
+    const command = profileInitCommand({ entry: this.runtimeEntry, nodePath: process.execPath })
+    await new Promise<void>((done) => {
+      execFile(
+        command.command,
+        [...command.args],
+        { env: { ...this.launchEnvironment, ...command.env }, cwd: homedir(), timeout: PROFILE_INIT_TIMEOUT_MS },
+        (error) => {
+          if (error !== null) this.log.write(`desktop: initializing the profile failed: ${String(error)}\n`)
+          done()
+        },
+      )
+    })
   }
 
   /**

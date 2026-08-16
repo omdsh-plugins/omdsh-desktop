@@ -5,6 +5,11 @@
 catalog:
   '@deepseek-ai/dsh': 0.1.0-rc.6
   '@deepseek-ai/dsh-host-apiproxy': 0.1.0-rc.6
+  # The bundles the installer carries. `runtime/package.json` currently names a
+  # sibling checkout instead, because this package is not published yet;
+  # `pnpm run plugins:npm` switches to this version the day it is, and
+  # `pnpm run check:plugin-pin` reports which of the two is in effect.
+  '@omdsh-plugins/omdsh-plughub': 0.1.0
 
 packages:
   - app

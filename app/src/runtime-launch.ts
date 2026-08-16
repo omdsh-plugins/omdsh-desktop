@@ -14,6 +14,16 @@
 const RUNTIME_HOST = '127.0.0.1'
 
 /**
+ * The profile every launch of this shell composes.
+ *
+ * Named once because two invocations reach for it: the launch below, and the
+ * one-shot initialization the bundled-plugin seeding runs first. A seeding
+ * that prepared a different profile than the one that boots would be
+ * invisible until somebody looked.
+ */
+export const RUNTIME_PROFILE = 'web'
+
+/**
  * Port request for the runtime. Zero asks the OS for a free port, which keeps
  * the shell from colliding with a `dsh web` the user started in a terminal.
  */
@@ -100,7 +110,7 @@ export function localRuntimeLaunch(options: {
       `--max-old-space-size=${String(options.maxOldSpaceMb)}`,
       options.entry,
       '--profile',
-      'web',
+      RUNTIME_PROFILE,
       '--host',
       RUNTIME_HOST,
       '--port',
@@ -110,5 +120,44 @@ export function localRuntimeLaunch(options: {
     description: 'this machine',
     explain: exit =>
       `the harness runtime stopped ${String(exit.attempts)} times in a row (${endingCause(exit)})`,
+  }
+}
+
+/** One short-lived invocation of the runtime that is not a supervised launch. */
+export interface RuntimeCommand {
+  /** Executable to spawn. */
+  command: string
+  /** Its complete argument vector. */
+  args: readonly string[]
+  /** Environment entries this invocation adds to the shell's own. */
+  env: Readonly<Record<string, string>>
+}
+
+/**
+ * Plan the invocation that materializes {@link RUNTIME_PROFILE} on disk.
+ *
+ * The shell seeds the profile it is about to boot with the plugins this
+ * application ships, and seeding means editing that profile's manifest — so
+ * the manifest has to exist first. Creating it here would mean this repository
+ * carrying its own copy of the launcher's profile template: the manifest, the
+ * empty user patch layer, and the pnpm settings out-of-tree plugins are
+ * installed under. A copy that drifted would be silent, and the pnpm settings
+ * are the half that matters — a profile initialized without them installs
+ * plugins with a different linker and auto-installed peers.
+ *
+ * `--dump-default-config` prints the profile's bundle layers and exits, and it
+ * resolves the profile to do so, which initializes it exactly as a boot would.
+ * The output is discarded; the directory it left behind is the point. It costs
+ * roughly a third of a second and runs only when the profile is absent.
+ * @param options - the launcher to run and the Node-capable binary to run it with.
+ * @param options.entry - absolute path of the `dsh` launcher.
+ * @param options.nodePath - Node-capable binary to run it with.
+ * @returns the prepared invocation.
+ */
+export function profileInitCommand(options: { entry: string; nodePath: string }): RuntimeCommand {
+  return {
+    command: options.nodePath,
+    args: [...RUNTIME_NODE_FLAGS, options.entry, '--profile', RUNTIME_PROFILE, '--dump-default-config'],
+    env: { ELECTRON_RUN_AS_NODE: '1' },
   }
 }
