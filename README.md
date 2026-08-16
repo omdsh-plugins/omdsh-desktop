@@ -19,15 +19,17 @@ The shell is not part of the harness. It spawns the runtime as a child process a
 
 ## The harness release it ships
 
-Two files name it and they name the same one, `0.1.0-rc.6` today. `runtime/package.json` is what the packaging pipeline installs: it is a deploy root outside the workspace, where a `catalog:` reference would have nothing to resolve against, so it restates the version literally. `pnpm-workspace.yaml`'s catalog is what `app` resolves its API client from. `pnpm run check:harness-pin` is the proof that the two agree — and it fails while either one is on a `link:`.
+Three files name it and they name the same one, `0.1.0-rc.6` today — the third being the application's own version, because the artifact's name is what tells somebody which runtime is inside it. `runtime/package.json` is what the packaging pipeline installs: it is a deploy root outside the workspace, where a `catalog:` reference would have nothing to resolve against, so it restates the version literally. `pnpm-workspace.yaml`'s catalog is what `app` resolves its API client from. `pnpm run check:harness-pin` is the proof that the two agree — and it fails while either one is on a `link:`.
 
 The workspace installs that release under `runtime/`, so a checkout run supervises the same runtime a packaged one embeds — which is what makes running from source representative. Packaging reads the same file.
 
 ```sh
-pnpm run check:harness-pin        # the runtime manifest and the catalog name one release
-pnpm run harness:npm              # build against the published release (the default)
+pnpm run check:harness-pin        # the manifests, the catalog, and the version name one release
+pnpm run harness:npm              # build against the published release (the default), and take its version
 pnpm run harness:local ../../deepseek-harness   # build against a sibling checkout instead
 ```
+
+`harness:npm` sets `package.json` and `app/package.json` to the release it points at, and `check:harness-pin` fails when they drift — so moving to a new harness is one command rather than one command plus a manifest edit somebody has to remember. A rebuild of the SAME release is named `<release>+<n>`: semver ignores build metadata for precedence, which is right, because such a build is not a newer release.
 
 The local mode points `@deepseek-ai/dsh` and the API client at a harness checkout through `link:`. pnpm does not install a linked package's own dependencies, so that checkout must be installed and built (`pnpm run build`) first. Use it to see unreleased harness work in the shell; switch back with `harness:npm` before packaging anything you intend to ship.
 

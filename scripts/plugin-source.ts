@@ -38,6 +38,7 @@
 import { readFile, writeFile } from 'node:fs/promises'
 import { existsSync, readFileSync } from 'node:fs'
 import { join, relative, resolve } from 'node:path'
+import { pathToFileURL } from 'node:url'
 import { parseArgs } from 'node:util'
 import { localPath } from './bundled-plugins.ts'
 
@@ -251,23 +252,28 @@ async function check(): Promise<void> {
   }
 }
 
-const { values, positionals } = parseArgs({
-  args: process.argv.slice(2).filter(argument => argument !== '--'),
-  options: {
-    local: { type: 'boolean', default: false },
-    npm: { type: 'boolean', default: false },
-    none: { type: 'boolean', default: false },
-    check: { type: 'boolean', default: false },
-  },
-  allowPositionals: true,
-})
+// Only when this file IS the program, so a spec may import it without the CLI
+// running and throwing on the flags it did not get. `harness-source.ts` is
+// guarded the same way and for the same reason.
+if (process.argv[1] !== undefined && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  const { values, positionals } = parseArgs({
+    args: process.argv.slice(2).filter(argument => argument !== '--'),
+    options: {
+      local: { type: 'boolean', default: false },
+      npm: { type: 'boolean', default: false },
+      none: { type: 'boolean', default: false },
+      check: { type: 'boolean', default: false },
+    },
+    allowPositionals: true,
+  })
 
-if (values.check) await check()
-else if (values.npm) await useRegistry()
-else if (values.none) await useNothing()
-else if (values.local) {
-  const checkouts = positionals[0]
-  if (checkouts === undefined) throw new Error(`${PREFIX}: --local needs the directory holding the plugin checkouts.`)
-  await useLocal(checkouts)
+  if (values.check) await check()
+  else if (values.npm) await useRegistry()
+  else if (values.none) await useNothing()
+  else if (values.local) {
+    const checkouts = positionals[0]
+    if (checkouts === undefined) throw new Error(`${PREFIX}: --local needs the directory holding the plugin checkouts.`)
+    await useLocal(checkouts)
+  }
+  else throw new Error(`${PREFIX}: pass --local <checkouts>, --npm, --none, or --check.`)
 }
-else throw new Error(`${PREFIX}: pass --local <checkouts>, --npm, --none, or --check.`)

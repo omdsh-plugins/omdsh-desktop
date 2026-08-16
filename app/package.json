@@ -1,7 +1,7 @@
 {
   "name": "@omdsh-plugins/omdsh-desktop",
   "description": "DSH desktop application: an Electron shell that supervises an embedded dsh web runtime and adds the native surface around it",
-  "version": "0.1.0-rc.5",
+  "version": "0.1.0-rc.6",
   "private": true,
   "type": "module",
   "main": "lib/main.mjs",

@@ -11,6 +11,11 @@
  *   supervises and bundles. pnpm does not install a linked package's own
  *   dependencies, so the checkout must have been installed and built itself.
  *
+ * The application's own version is part of the same pin. It names the harness
+ * release inside it, `harness:npm` sets it, and `check:harness-pin` fails when
+ * it drifts — so switching the release is one command rather than one command
+ * plus a manifest edit somebody has to remember.
+ *
  * Run: `pnpm run harness:local ../../deepseek-harness`, `pnpm run harness:npm`,
  * or `pnpm run check:harness-pin` to prove the pinned versions agree.
  * @module @omdsh-plugins/omdsh-desktop/scripts/harness-source
@@ -19,6 +24,7 @@
 import { readFile, writeFile } from 'node:fs/promises'
 import { existsSync } from 'node:fs'
 import { join, relative, resolve } from 'node:path'
+import { pathToFileURL } from 'node:url'
 import { parseArgs } from 'node:util'
 
 const root = resolve(import.meta.dirname, '..')
@@ -42,6 +48,30 @@ const HARNESS_APIPROXY_DIRECTORY = join('packages', 'host', 'apiproxy')
 interface Manifest {
   dependencies?: Record<string, string>
   devDependencies?: Record<string, string>
+}
+
+/** Manifests whose version tracks the harness release, nearest the artifact first. */
+const VERSIONED_MANIFESTS = ['app/package.json', 'package.json'] as const
+
+/**
+ * Whether the application may call itself this, given the release it ships.
+ *
+ * The version names the harness inside, because that is the question a person
+ * holding the artifact has: `DeepSeek-Harness-0.1.0-rc.6-arm64.dmg` says which
+ * runtime it is. Anything else has to be looked up.
+ *
+ * A `+<n>` build suffix is allowed and nothing else is. It is what a
+ * desktop-only rebuild of the SAME harness is called — today's shims changed
+ * the shell without touching the runtime — and semver ignores build metadata
+ * for precedence, which is exactly right: `0.1.0-rc.6+1` is not a newer
+ * release, it is the same one built again. A suffix that sorted would be a
+ * claim this application is not entitled to make.
+ * @param version - the manifest's version.
+ * @param release - the harness release the catalog pins.
+ * @returns true when the version names that release.
+ */
+export function versionNamesRelease(version: string, release: string): boolean {
+  return version === release || new RegExp(`^${release.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&')}\\+\\d+$`, 'u').test(version)
 }
 
 /**
@@ -104,7 +134,11 @@ async function useRegistry(): Promise<void> {
   const version = await catalogVersion(HARNESS_PACKAGE)
   await setDependency(join(root, 'runtime', 'package.json'), 'dependencies', HARNESS_PACKAGE, version)
   await setDependency(join(root, 'app', 'package.json'), 'devDependencies', APIPROXY_PACKAGE, 'catalog:')
-  console.log(`${PREFIX}: building against the published ${HARNESS_PACKAGE}@${version}`)
+  // The version comes with the pin rather than after it: switching the release
+  // this application ships IS the occasion for its own version to change, and
+  // a step somebody has to remember separately is the step that drifts.
+  for (const manifest of VERSIONED_MANIFESTS) await setVersion(join(root, manifest), version)
+  console.log(`${PREFIX}: building against the published ${HARNESS_PACKAGE}@${version}, and calling itself that`)
   console.log(`${PREFIX}: run 'pnpm install'.`)
 }
 
@@ -147,6 +181,34 @@ async function check(): Promise<void> {
     throw new Error(`${PREFIX}: runtime/package.json pins ${pinned} but the catalog pins ${version}; they must name one release.`)
   }
   console.log(`${PREFIX}: runtime and catalog both pin ${HARNESS_PACKAGE}@${version}, and app is on the catalog.`)
+
+  // The version is checked last so a drifted PIN is reported first: a version
+  // that names the wrong release is a symptom of that, and fixing the pin fixes
+  // both.
+  for (const manifest of VERSIONED_MANIFESTS) {
+    const declared = (await readManifest(join(root, manifest)) as Manifest & { version?: string }).version
+    if (declared === undefined) throw new Error(`${PREFIX}: ${manifest} declares no version.`)
+    if (!versionNamesRelease(declared, version)) {
+      throw new Error(
+        `${PREFIX}: ${manifest} is ${declared} but this application ships ${HARNESS_PACKAGE}@${version}; `
+        + `the artifact's name is what tells somebody which runtime is inside it. `
+        + `Run 'pnpm run harness:npm' to set it, or name it ${version}+<n> for a rebuild of the same release.`,
+      )
+    }
+  }
+  console.log(`${PREFIX}: the application calls itself ${String((await readManifest(join(root, VERSIONED_MANIFESTS[0])) as Manifest & { version?: string }).version)}.`)
+}
+
+/**
+ * Rewrite one manifest's version, leaving a build suffix behind.
+ * @param path - absolute manifest path.
+ * @param version - the release to name.
+ */
+async function setVersion(path: string, version: string): Promise<void> {
+  const manifest = await readManifest(path) as Manifest & { version?: string }
+  if (manifest.version === version) return
+  manifest.version = version
+  await writeManifest(path, manifest)
 }
 
 /**
@@ -175,21 +237,27 @@ function toPosix(path: string): string {
   return path.split('\\').join('/')
 }
 
-const { values, positionals } = parseArgs({
-  args: process.argv.slice(2).filter(argument => argument !== '--'),
-  options: {
-    local: { type: 'boolean', default: false },
-    npm: { type: 'boolean', default: false },
-    check: { type: 'boolean', default: false },
-  },
-  allowPositionals: true,
-})
+// Only when this file IS the program. A spec importing it for
+// `versionNamesRelease` would otherwise run the CLI, which parses no flags and
+// throws — the module would be untestable, and the rule it enforces is exactly
+// the part worth a test.
+if (process.argv[1] !== undefined && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  const { values, positionals } = parseArgs({
+    args: process.argv.slice(2).filter(argument => argument !== '--'),
+    options: {
+      local: { type: 'boolean', default: false },
+      npm: { type: 'boolean', default: false },
+      check: { type: 'boolean', default: false },
+    },
+    allowPositionals: true,
+  })
 
-if (values.check) await check()
-else if (values.npm) await useRegistry()
-else if (values.local) {
-  const checkout = positionals[0]
-  if (checkout === undefined) throw new Error(`${PREFIX}: --local needs the path to a harness checkout.`)
-  await useLocal(checkout)
+  if (values.check) await check()
+  else if (values.npm) await useRegistry()
+  else if (values.local) {
+    const checkout = positionals[0]
+    if (checkout === undefined) throw new Error(`${PREFIX}: --local needs the path to a harness checkout.`)
+    await useLocal(checkout)
+  }
+  else throw new Error(`${PREFIX}: pass --local <checkout>, --npm, or --check.`)
 }
-else throw new Error(`${PREFIX}: pass --local <checkout>, --npm, or --check.`)

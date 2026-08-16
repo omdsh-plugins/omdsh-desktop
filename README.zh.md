@@ -19,15 +19,17 @@
 
 ## 它内置的 harness 版本
 
-两个文件写着它，而且写的是同一个，今天是 `0.1.0-rc.6`。`runtime/package.json` 是打包流水线真正去安装的那一份：它是工作区之外的一个部署根，那里 `catalog:` 引用无处可解，所以版本号在这里是字面重述一遍的。`pnpm-workspace.yaml` 的 catalog 则是 `app` 解析 API 客户端所依据的那一份。`pnpm run check:harness-pin` 就是这两者一致的证明——只要其中任何一个还挂着 `link:`，它就失败。
+三个文件写着它，而且写的是同一个，今天是 `0.1.0-rc.6`——第三个是应用自己的版本号，因为产物的文件名就是告诉别人"里面装的是哪个运行时"的东西。`runtime/package.json` 是打包流水线真正去安装的那一份：它是工作区之外的一个部署根，那里 `catalog:` 引用无处可解，所以版本号在这里是字面重述一遍的。`pnpm-workspace.yaml` 的 catalog 则是 `app` 解析 API 客户端所依据的那一份。`pnpm run check:harness-pin` 就是这两者一致的证明——只要其中任何一个还挂着 `link:`，它就失败。
 
 工作区把那个版本装在 `runtime/` 下，所以从检出运行时监管的运行时，和打好包的那个内嵌的是同一个——这正是"从源码跑起来"具有代表性的原因。打包读的也是同一个文件。
 
 ```sh
-pnpm run check:harness-pin        # runtime manifest 和 catalog 指向同一个版本
-pnpm run harness:npm              # 对着已发布的版本构建（默认）
+pnpm run check:harness-pin        # 两份 manifest、catalog 和版本号指向同一个版本
+pnpm run harness:npm              # 对着已发布的版本构建（默认），并把版本号取过来
 pnpm run harness:local ../../deepseek-harness   # 改为对着同级检出构建
 ```
+
+`harness:npm` 会把 `package.json` 和 `app/package.json` 的版本号设成它所指向的那个 release，而 `check:harness-pin` 在两者漂移时失败——所以换一个 harness 版本是**一条命令**，而不是一条命令外加一处得靠人记住的 manifest 编辑。同一个 release 的重新构建叫 `<release>+<n>`：semver 在比较优先级时忽略 build metadata，这正好对——那样的构建不是一个更新的 release。
 
 local 模式把 `@deepseek-ai/dsh` 和 API 客户端用 `link:` 指到一个 harness 检出上。pnpm 不会安装被 link 的包自己的依赖，所以那个检出必须先自己装好、自己构建过（`pnpm run build`）。用它来在外壳里看尚未发布的 harness 改动；准备交付的东西在打包前先用 `harness:npm` 切回去。
 
