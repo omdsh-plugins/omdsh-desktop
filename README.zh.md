@@ -25,9 +25,15 @@
 
 ```sh
 pnpm run check:harness-pin        # 两份 manifest、catalog 和版本号指向同一个版本
+pnpm run check:harness-outdated   # registry 上有更新的 release 时失败
+pnpm run harness:latest           # 迁到它：catalog、runtime pin，以及这个应用自己的版本号
 pnpm run harness:npm              # 对着已发布的版本构建（默认），并把版本号取过来
 pnpm run harness:local ../../deepseek-harness   # 改为对着同级检出构建
 ```
+
+上游发了新版本时，`harness:latest` 就是全部动作：读 registry 上有什么、拒绝任何不比当前 pin 更新的东西、要求 API 客户端**发布了同一个 release**，然后写两条 catalog 条目，再做 `harness:npm` 做的事。`check:harness-outdated` 是同样的读取但不写，所以定时任务可以用它来说"有个新版本在等着"。
+
+两者都**不看 `latest` dist-tag**，这不是为谨慎而谨慎：`@deepseek-ai/dsh-host-apiproxy` 已经发布了 `0.1.0-rc.6`，而它的 `latest` 还指着 `0.0.1-rc.1`——一条相信这个 tag 的命令，会告诉你这个应用得把 API 客户端往回退一个 minor 版本。
 
 `harness:npm` 会把 `package.json` 和 `app/package.json` 的版本号设成它所指向的那个 release，而 `check:harness-pin` 在两者漂移时失败——所以换一个 harness 版本是**一条命令**，而不是一条命令外加一处得靠人记住的 manifest 编辑。同一个 release 的重新构建叫 `<release>+<n>`：semver 在比较优先级时忽略 build metadata，这正好对——那样的构建不是一个更新的 release。
 

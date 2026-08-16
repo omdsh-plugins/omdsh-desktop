@@ -25,9 +25,15 @@ The workspace installs that release under `runtime/`, so a checkout run supervis
 
 ```sh
 pnpm run check:harness-pin        # the manifests, the catalog, and the version name one release
+pnpm run check:harness-outdated   # fail when the registry has a newer release than this pin
+pnpm run harness:latest           # move to it: catalog, runtime pin, and this application's version
 pnpm run harness:npm              # build against the published release (the default), and take its version
 pnpm run harness:local ../../deepseek-harness   # build against a sibling checkout instead
 ```
+
+`harness:latest` is the whole move when the harness publishes a new release: it reads what the registry has, refuses anything that is not newer than the current pin, requires the API client to publish the SAME release, writes both catalog entries, and then does what `harness:npm` does. `check:harness-outdated` is the same reading without the writing, so a scheduled job can say a release is waiting.
+
+Neither consults a `latest` dist-tag, and that is not caution for its own sake: `@deepseek-ai/dsh-host-apiproxy` publishes `0.1.0-rc.6` while its `latest` still points at `0.0.1-rc.1`, so a command that trusted the tag would have answered that this application must move its API client back a minor version.
 
 `harness:npm` sets `package.json` and `app/package.json` to the release it points at, and `check:harness-pin` fails when they drift — so moving to a new harness is one command rather than one command plus a manifest edit somebody has to remember. A rebuild of the SAME release is named `<release>+<n>`: semver ignores build metadata for precedence, which is right, because such a build is not a newer release.
 

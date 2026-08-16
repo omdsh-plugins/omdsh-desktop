@@ -50,6 +50,83 @@ interface Manifest {
   devDependencies?: Record<string, string>
 }
 
+/** Where a package's published versions are read from. */
+const REGISTRY = 'https://registry.npmjs.org'
+
+/** How long the registry has to answer before the command gives up. */
+const REGISTRY_TIMEOUT_MS = 15_000
+
+/**
+ * Order two releases the way semver does, so an update is never a downgrade.
+ *
+ * Hand-rolled rather than depended on, for the reason everything else here is:
+ * this repository ships an application, and a build-time dependency to compare
+ * two strings it already owns is a poor trade. The rules it implements are the
+ * ones these versions actually use — numeric release parts, then an optional
+ * dot-separated prerelease whose numeric identifiers compare numerically, and
+ * where HAVING a prerelease sorts before not having one (`0.1.0-rc.6` is
+ * behind `0.1.0`). Build metadata is ignored, which is what makes
+ * `0.1.0-rc.6+1` neither ahead of nor behind `0.1.0-rc.6`.
+ * @param left - one version.
+ * @param right - the other.
+ * @returns negative when left is older, positive when newer, zero when equal.
+ */
+export function compareReleases(left: string, right: string): number {
+  const parse = (version: string): { release: number[]; pre: string[] } => {
+    const [core = ''] = version.split('+')
+    const dash = core.indexOf('-')
+    const release = (dash === -1 ? core : core.slice(0, dash)).split('.').map(part => Number(part) || 0)
+    return { release, pre: dash === -1 ? [] : core.slice(dash + 1).split('.') }
+  }
+  const a = parse(left)
+  const b = parse(right)
+  for (let index = 0; index < Math.max(a.release.length, b.release.length); index += 1) {
+    const difference = (a.release[index] ?? 0) - (b.release[index] ?? 0)
+    if (difference !== 0) return difference
+  }
+  // A release with a prerelease is BEHIND the same release without one.
+  if (a.pre.length === 0 !== (b.pre.length === 0)) return a.pre.length === 0 ? 1 : -1
+  for (let index = 0; index < Math.max(a.pre.length, b.pre.length); index += 1) {
+    const one = a.pre[index]
+    const other = b.pre[index]
+    if (one === undefined) return -1
+    if (other === undefined) return 1
+    if (one === other) continue
+    const numeric = /^\d+$/u.test(one) && /^\d+$/u.test(other)
+    if (numeric) return Number(one) - Number(other)
+    return one < other ? -1 : 1
+  }
+  return 0
+}
+
+/**
+ * Every version one package has published.
+ *
+ * The whole list, never the `latest` tag. `@deepseek-ai/dsh-host-apiproxy`
+ * publishes `0.1.0-rc.6` while its `latest` still points at `0.0.1-rc.1`, so a
+ * command that trusted the tag would answer that this application must
+ * downgrade its API client by a minor version to stay in step. What matters is
+ * whether a version EXISTS, and for the harness itself, which of them is
+ * newest.
+ * @param name - the package.
+ * @returns its published versions, unordered.
+ * @throws Error when the registry cannot be read.
+ */
+async function publishedVersions(name: string): Promise<string[]> {
+  const url = `${REGISTRY}/${name.replace('/', '%2F')}`
+  let response: Response
+  try {
+    response = await fetch(url, { signal: AbortSignal.timeout(REGISTRY_TIMEOUT_MS) })
+  } catch (error) {
+    throw new Error(`${PREFIX}: could not reach ${url}: ${error instanceof Error ? error.message : String(error)}`)
+  }
+  if (!response.ok) throw new Error(`${PREFIX}: ${url} answered ${String(response.status)}.`)
+  const document = await response.json() as { versions?: Record<string, unknown> }
+  const versions = Object.keys(document.versions ?? {})
+  if (versions.length === 0) throw new Error(`${PREFIX}: ${name} publishes no versions.`)
+  return versions
+}
+
 /** Manifests whose version tracks the harness release, nearest the artifact first. */
 const VERSIONED_MANIFESTS = ['app/package.json', 'package.json'] as const
 
@@ -140,6 +217,68 @@ async function useRegistry(): Promise<void> {
   for (const manifest of VERSIONED_MANIFESTS) await setVersion(join(root, manifest), version)
   console.log(`${PREFIX}: building against the published ${HARNESS_PACKAGE}@${version}, and calling itself that`)
   console.log(`${PREFIX}: run 'pnpm install'.`)
+}
+
+/**
+ * Rewrite one catalog entry in `pnpm-workspace.yaml`.
+ *
+ * Text surgery for the reason the catalog is read that way: the file is this
+ * repository's own settings plus its comments explaining them, and rewriting it
+ * through a YAML serializer to change two version strings would reformat the
+ * explanations along with them.
+ * @param name - the catalogued package.
+ * @param version - the version to record.
+ */
+async function setCatalogVersion(name: string, version: string): Promise<void> {
+  const path = join(root, 'pnpm-workspace.yaml')
+  const text = await readFile(path, 'utf8')
+  const escaped = name.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&')
+  const pattern = new RegExp(`^(\\s+'${escaped}':\\s*)(\\S+)(\\s*)$`, 'mu')
+  if (!pattern.test(text)) throw new Error(`${PREFIX}: pnpm-workspace.yaml catalog does not pin ${name}.`)
+  await writeFile(path, text.replace(pattern, `$1${version}$3`))
+}
+
+/**
+ * Move to the newest harness the registry has, or report that one exists.
+ *
+ * The two catalogued packages move together or not at all. The harness decides
+ * WHICH release that is; the API client only has to have published the same
+ * one, and it is checked rather than assumed — a shell built against a client
+ * from a different release is the kind of mismatch that compiles and then
+ * misbehaves at a seam.
+ *
+ * Never a downgrade. `latest` is not consulted for either package, so a
+ * mis-tagged upstream cannot walk this application backwards, and a pin that
+ * is already ahead of everything published is reported rather than rewritten.
+ * @param apply - false to report only, which is what a scheduled check wants.
+ * @throws Error when the registry disagrees with itself or cannot be read.
+ */
+async function useLatest(apply: boolean): Promise<void> {
+  const current = await catalogVersion(HARNESS_PACKAGE)
+  const newest = (await publishedVersions(HARNESS_PACKAGE))
+    .reduce((best, candidate) => (compareReleases(candidate, best) > 0 ? candidate : best))
+
+  if (compareReleases(newest, current) <= 0) {
+    console.log(`${PREFIX}: ${HARNESS_PACKAGE}@${current} is the newest published release; nothing to do.`)
+    return
+  }
+
+  if (!(await publishedVersions(APIPROXY_PACKAGE)).includes(newest)) {
+    throw new Error(
+      `${PREFIX}: ${HARNESS_PACKAGE}@${newest} is published but ${APIPROXY_PACKAGE}@${newest} is not, `
+      + 'and this application needs both at one release. Wait for it, or pin by hand if the mismatch is deliberate.',
+    )
+  }
+
+  if (!apply) {
+    throw new Error(`${PREFIX}: ${HARNESS_PACKAGE}@${newest} is published and this repository ships ${current}; run 'pnpm run harness:latest'.`)
+  }
+
+  for (const name of [HARNESS_PACKAGE, APIPROXY_PACKAGE]) await setCatalogVersion(name, newest)
+  console.log(`${PREFIX}: moved the catalog from ${current} to ${newest}`)
+  // The rest is what `harness:npm` already does — the runtime pin and the
+  // application's own version — so it is called rather than repeated.
+  await useRegistry()
 }
 
 /**
@@ -247,17 +386,21 @@ if (process.argv[1] !== undefined && import.meta.url === pathToFileURL(process.a
     options: {
       local: { type: 'boolean', default: false },
       npm: { type: 'boolean', default: false },
+      latest: { type: 'boolean', default: false },
+      outdated: { type: 'boolean', default: false },
       check: { type: 'boolean', default: false },
     },
     allowPositionals: true,
   })
 
   if (values.check) await check()
+  else if (values.outdated) await useLatest(false)
+  else if (values.latest) await useLatest(true)
   else if (values.npm) await useRegistry()
   else if (values.local) {
     const checkout = positionals[0]
     if (checkout === undefined) throw new Error(`${PREFIX}: --local needs the path to a harness checkout.`)
     await useLocal(checkout)
   }
-  else throw new Error(`${PREFIX}: pass --local <checkout>, --npm, or --check.`)
+  else throw new Error(`${PREFIX}: pass --local <checkout>, --npm, --latest, --outdated, or --check.`)
 }

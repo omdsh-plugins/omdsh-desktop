@@ -20,6 +20,8 @@
     "package:desktop": "tsx scripts/package-desktop-app.ts",
     "harness:local": "tsx scripts/harness-source.ts --local",
     "harness:npm": "tsx scripts/harness-source.ts --npm",
+    "harness:latest": "tsx scripts/harness-source.ts --latest",
+    "check:harness-outdated": "tsx scripts/harness-source.ts --outdated",
     "check:harness-pin": "tsx scripts/harness-source.ts --check",
     "plugins:local": "tsx scripts/plugin-source.ts --local",
     "plugins:npm": "tsx scripts/plugin-source.ts --npm",
