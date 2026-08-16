@@ -10,7 +10,7 @@ The shell is not part of the harness. It spawns the runtime as a child process a
 
 | Platform | Installer |
 |---|---|
-| **macOS 13+, Apple silicon** | [DeepSeek-Harness-0.1.0-rc.6-arm64.dmg](https://github.com/omdsh-plugins/omdsh-desktop/releases/download/v0.1.0-rc.6/DeepSeek-Harness-0.1.0-rc.6-arm64.dmg) · 217 MB |
+| **macOS 13+, Apple silicon** | [DeepSeek-Harness-0.1.0-rc.6-arm64.dmg](https://github.com/omdsh-plugins/omdsh-desktop/releases/download/v0.1.0-rc.6/DeepSeek-Harness-0.1.0-rc.6-arm64.dmg) · 211 MB |
 | **Windows x64** | [DeepSeek-Harness-0.1.0-rc.6-x64-setup.exe](https://github.com/omdsh-plugins/omdsh-desktop/releases/download/v0.1.0-rc.6/DeepSeek-Harness-0.1.0-rc.6-x64-setup.exe) · 134 MB |
 
 Those two links are pinned to one build; **[the releases page](https://github.com/omdsh-plugins/omdsh-desktop/releases/latest)** always has the newest. Nothing else is needed on the machine — the harness runtime, the plugin hub and the mode system are inside the installer.

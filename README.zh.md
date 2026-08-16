@@ -10,7 +10,7 @@
 
 | 平台 | 安装包 |
 |---|---|
-| **macOS 13 及以上，Apple 芯片** | [DeepSeek-Harness-0.1.0-rc.6-arm64.dmg](https://github.com/omdsh-plugins/omdsh-desktop/releases/download/v0.1.0-rc.6/DeepSeek-Harness-0.1.0-rc.6-arm64.dmg) · 217 MB |
+| **macOS 13 及以上，Apple 芯片** | [DeepSeek-Harness-0.1.0-rc.6-arm64.dmg](https://github.com/omdsh-plugins/omdsh-desktop/releases/download/v0.1.0-rc.6/DeepSeek-Harness-0.1.0-rc.6-arm64.dmg) · 211 MB |
 | **Windows 64 位** | [DeepSeek-Harness-0.1.0-rc.6-x64-setup.exe](https://github.com/omdsh-plugins/omdsh-desktop/releases/download/v0.1.0-rc.6/DeepSeek-Harness-0.1.0-rc.6-x64-setup.exe) · 134 MB |
 
 上面两个链接锁定的是某一次构建；**[发布页](https://github.com/omdsh-plugins/omdsh-desktop/releases/latest)** 上永远是最新的那一版。机器上不需要再装别的——harness 运行时、插件中心、模式系统都在安装包里。
