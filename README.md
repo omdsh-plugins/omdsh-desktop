@@ -33,24 +33,30 @@ The local mode points `@deepseek-ai/dsh` and the API client at a harness checkou
 
 ## The plugins it ships
 
-The installer is built to carry [`omdsh-plughub`](https://github.com/omdsh-plugins/omdsh-plughub), and deliberately nothing else.
+The installer carries [`omdsh-plughub`](https://github.com/omdsh-plugins/omdsh-plughub) and [`omdsh-base`](https://github.com/omdsh-plugins/omdsh-base). Each is there for a different reason, and neither generalizes to a third.
 
-It is there because it is the one plugin that cannot be installed by the mechanism it provides. Installing a plugin is `dsh plugin --profile web add <package>` in a terminal, and a machine that has just run an installer has no `dsh` on its `PATH` — so a freshly installed application would open a harness with no route to a second plugin. Everything past the hub is a plugin the hub can install, and a plugin frozen into the installer is pinned to this application's release cadence while the packages that depend on it update freely. `omdsh-base` is the clearest case: it is a `peerDependency` of every mode plugin, and the profile is installed with `autoInstallPeers: false`, so installing a mode plugin does not bring it. That is a discoverability cost the hub can pay for — a mode plugin without it loads inert rather than failing — and not a reason to freeze a shared library here.
+**The hub is the one plugin that cannot be installed by the mechanism it provides.** Installing a plugin is `dsh plugin --profile web add <package>` in a terminal, and a machine that has just run an installer has no `dsh` on its `PATH` — so a freshly installed application would open a harness with no route to a second plugin.
 
-Which bundles ship is declared once, as the `@omdsh-plugins/*` entries of the catalog; `runtime/package.json` must name all of them.
+**The mode system is the peer nothing auto-installs.** It contributes no mode of its own and shows no switch on its own; it is the registry every mode plugin registers into, declared by each of them as a `peerDependency`. The profile is installed with `autoInstallPeers: false`, so installing Chat or Code through the hub does NOT bring it, and a mode plugin without it loads inert — no switch, no segment, no error. Shipping it means one click gets a working mode instead of a silent one.
+
+The cost is real and worth naming: a shared library in the installer is pinned to this application's release cadence while the packages that depend on it update freely. Two things keep that from biting. Its dependents declare it as `*`, so no version of it blocks one of them; and the hub can install a newer copy into the profile itself, which is nearer on the resolution walk than the one this application links, so an installation is never stuck with the bundled one.
+
+Everything past these two is a plugin the hub can install, and the reasoning above is what a third would have to earn.
+
+Which bundles ship is declared as the `@omdsh-plugins/*` entries of the catalog, and `runtime/package.json` must name all of them at the same version — `omdsh-base` and `omdsh-plughub`, both `0.1.1` today. Two files, for the reason the harness release is also stated twice: the closure installs outside this workspace, where a `catalog:` reference has nothing to resolve against.
 
 ```sh
-pnpm run check:plugin-pin       # the runtime manifest is in a state a bare clone can install
-pnpm run plugins:npm            # ship the published versions
+pnpm run check:plugin-pin       # the runtime manifest and the catalog name one release
+pnpm run plugins:npm            # ship the published versions (the default)
 pnpm run plugins:local ..       # ship the sibling checkouts instead
-pnpm run plugins:none           # ship none, which is what is committed
+pnpm run plugins:none           # ship none
 ```
 
-**A default build ships no plugin, and that is the committed state today**, because `@omdsh-plugins/omdsh-plughub` is published neither to npm nor to GitHub — there is no specifier a clone of this repository alone could resolve. Packaging says so on every run. Build an installer that carries the hub with `plugins:local ..` first; publish the package and `plugins:npm` makes it the default.
+A default build carries both, and packaging names what it carries on every run.
 
-What is deliberately NOT committed is a `link:`. pnpm resolves it against the declaring manifest, so a clone without the sibling checkouts warns, exits zero, and leaves a dangling symlink — which packaging then carries into the `.app`, where macOS refuses to sign the bundle at all. `check:plugin-pin` fails on one, and CONVENTIONS rule 8 is the same rule.
+What must never be committed is a `link:`. pnpm resolves it against the declaring manifest, so a clone without the sibling checkouts warns, exits zero, and leaves a dangling symlink — which packaging then carries into the `.app`, where macOS refuses to sign the bundle at all. `check:plugin-pin` fails on one, and CONVENTIONS rule 8 is the same rule. Use `plugins:local ..` to package unreleased plugin work, and `plugins:npm` before committing.
 
-Packaging is otherwise untroubled by a local bundle: `scripts/bundled-plugins.ts` packs each into a tarball and installs the closure from that, so what ships is real files. `pnpm pack` runs each package's `prepare`, so those checkouts must be installed.
+Packaging is otherwise untroubled by a local bundle: `scripts/bundled-plugins.ts` packs each into a tarball and installs the closure from that, so what ships is real files rather than a symlink. `pnpm pack` runs each package's `prepare`, so those checkouts must be installed. A version pin needs none of that — pnpm resolves it from the registry like anything else.
 
 ### How a shipped bundle reaches the profile
 
@@ -76,10 +82,9 @@ The runtime is the one beside the window, and that is the whole of it. Serving
 from another host, and every other capability beyond showing the harness, is
 the runtime's to grow through a plugin rather than something the shell reaches
 around it for. The installer makes that concrete rather than contradicting it:
-it carries [`omdsh-plughub`](https://github.com/omdsh-plugins/omdsh-plughub) in
-the closure, because a machine that has just run an installer has no `dsh` on
-its `PATH` and therefore no way to install a first plugin. That is a bundle the
-runtime loads, not a capability the shell holds. The closure the packaging
+it carries plugins in the closure — the hub because a machine that has just run
+an installer has no `dsh` on its `PATH` and therefore no way to install a first
+one. Those are bundles the runtime loads, not capabilities the shell holds. The closure the packaging
 pipeline embeds is built by [`scripts/runtime-closure.ts`](scripts/runtime-closure.ts)
 here.
 
@@ -132,9 +137,9 @@ pnpm run check:harness-pin  # the runtime manifest and the catalog name one rele
 pnpm run harness:npm        # build against the published release (the default)
 pnpm run harness:local ../../deepseek-harness   # build against a sibling checkout
 pnpm run check:plugin-pin   # the runtime manifest is in a state a bare clone can install
-pnpm run plugins:npm        # ship the published bundles
+pnpm run plugins:npm        # ship the published bundles (the default)
 pnpm run plugins:local ..   # ship the sibling checkouts instead
-pnpm run plugins:none       # ship none (the committed state)
+pnpm run plugins:none       # ship none
 pnpm run package:desktop    # the full artifact
 pnpm run clean              # remove app/lib, dist-desktop, and the tsbuildinfo files
 ```
@@ -163,7 +168,7 @@ The repository's own limits; [`app/README.md`](app/README.md#known-limitations) 
 - **macOS and Windows only.** Packaging refuses any other host outright, and there is no Linux target to ask for: the product is a `.dmg` and an NSIS setup. Linux is unsupported for building and for shipping alike.
 - **A Windows artifact can be packed from macOS, but not proven there.** Optional natives are prebuilt and the NSIS target needs no Wine, so the pack succeeds — but a Windows Electron binary cannot run on macOS, so the boot smoke is skipped and the artifact is unsmoked. A macOS artifact needs a macOS host.
 - **A cross-built Windows closure gets its `pnpm.cmd` written by hand.** pnpm creates `.bin` entries for the platform it installs ON, so a Windows closure built from macOS carries POSIX symlinks Windows cannot run and the hub does not look for. `scripts/runtime-closure.ts` writes the shim, and packaging fails if the command is missing — but the shim itself has only ever been exercised on Windows by hand, never by a smoke.
-- **A plugin installed from a git specifier still needs a real toolchain on Windows.** The shim reaches the shipped pnpm through the application binary, which is enough for a registry install — it runs no build. A git-hosted plugin builds itself in `prepare`, and that wants a `node.exe` the bundle does not carry. No `node.cmd` is shipped on purpose: it would go in front of the child's `PATH` and a `prepare` running `tsdown` would then fail to LOAD Rolldown's Node-ABI binding rather than fail to find Node — the same outcome, reported worse. Publishing the plugins is what removes this, not another shim.
+- **A plugin installed from a git specifier can fail in a way no allowlist reaches.** Preparing a git-hosted package runs `pnpm install` under pnpm's store to fetch that plugin's devDependencies; when that nested install is the one whose build scripts are blocked, it surfaces as `ERR_PNPM_PREPARE_PACKAGE` and the profile's `allowBuilds` does not apply to it. Publishing the plugin is what avoids it — a registry install downloads a built tree and runs no build. (The build itself is fine under the shipped Node: `tsdown` and its Rolldown binding load under `ELECTRON_RUN_AS_NODE`, because that binding is N-API and ABI-stable across Node and Electron.)
 - **Nothing is signed by a certificate a platform trusts.** The macOS bundle is ad-hoc signed rather than notarized and the Windows setup is unsigned, so both need the step under `## Install` on any machine but the one that built them.
 - **The runtime serves on loopback with an OS-assigned port and no authentication**, which is the posture `dsh web` already has: any process running as the same user can reach the API.
 - **No CI gate covers the application.** Packaging needs macOS or Windows and exercising the shell needs a windowing session, so a same-machine packaging run's boot smoke is what proves the closure it ships.

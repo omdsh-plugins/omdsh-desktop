@@ -17,8 +17,9 @@
  *   package's own dependencies, so those checkouts must be installed and built
  *   (`pnpm run build`) first.
  * - **none** — the manifest carries no bundle at all, and a build made from it
- *   ships none. This is what the repository commits while the catalogued
- *   packages are unpublished, and `plugins:none` is how you get back to it.
+ *   ships none. It is what a build for somebody who wants the plain harness
+ *   asks for, and it was the committed state while these packages were
+ *   unpublished.
  *
  * A committed `link:` is not a third mode, it is a bug: pnpm resolves it
  * against the declaring manifest, so `pnpm install` from a clone without the
@@ -197,20 +198,20 @@ async function useNothing(): Promise<void> {
  * Prove the runtime manifest is in a state that a clone of THIS repository
  * alone can install and package.
  *
- * A local specifier FAILS, and this is the one place `harness-source`'s
- * reasoning about the same manifest does not carry over. There, a `link:` is
- * tolerated in `runtime/package.json` because the registry pin is one command
- * away and is what gets committed. Here the catalogued packages are not
- * published anywhere, so a committed `link:` is not a temporary state somebody
- * will switch back from — it is the only state, and it is one where
+ * A local specifier FAILS, where `harness-source` merely reports one in the
+ * same manifest. The difference is what the specifier costs when it escapes.
+ * A linked harness makes a checkout run supervise a different build and
+ * packaging refuses it later anyway; a linked BUNDLE reaches the artifact.
  * `pnpm install` from a clone without the sibling checkouts warns, exits zero,
- * and leaves a dangling symlink that packaging carries into the `.app` until
- * codesign rejects the bundle. CONVENTIONS rule 8 names exactly this.
+ * and leaves a dangling symlink, which packaging then carries into the `.app`
+ * until codesign rejects the whole bundle over it. CONVENTIONS rule 8 names
+ * exactly this. `plugins:local` remains the way to PACKAGE unreleased plugin
+ * work; it is committing that state that this refuses.
  *
- * An ABSENT bundle passes and is reported. It is the honest pre-publication
- * state: the catalog says what this application intends to carry, the manifest
- * carries what it can, and a build made now ships no bundle rather than a
- * broken one.
+ * An ABSENT bundle passes and is reported, because shipping the plain harness
+ * is a legitimate thing to build — it is only worth saying out loud, since an
+ * installer missing the hub looks like one that has it until somebody opens
+ * Settings.
  */
 async function check(): Promise<void> {
   const catalog = await catalogedBundles()

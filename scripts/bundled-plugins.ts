@@ -6,7 +6,7 @@
  * — that is what `pnpm run plugins:local` writes, for packaging a build against
  * unreleased plugin work. It is a working-tree state and never a committed one:
  * `scripts/plugin-source.ts` fails `check:plugin-pin` on one, and what the
- * repository commits while these packages are unpublished is `plugins:none`.
+ * repository commits is the published version `plugins:npm` writes.
  *
  * Packaging still has to handle it, because packaging is exactly what that
  * state is for. pnpm honours the specifier by SYMLINKING the checkout into the

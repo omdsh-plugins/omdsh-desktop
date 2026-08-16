@@ -36,7 +36,7 @@ import { localRuntimeLaunch } from '../app/src/runtime-launch.ts'
 import { defaultHeapLimitMb } from '../app/src/resource-governor.ts'
 import { bundleNames, packLocalBundles } from './bundled-plugins.ts'
 import { runCommand } from './run-command.ts'
-import { CLOSURE_BIN_RELATIVE, installRuntimeClosure, writeWindowsPnpmShim } from './runtime-closure.ts'
+import { installRuntimeClosure, nodeCommandRelative, pnpmCommandRelative, writeClosureShims } from './runtime-closure.ts'
 import { readRuntimePin } from './runtime-pin.ts'
 import { createDiskImage } from './macos-disk-image.ts'
 
@@ -775,18 +775,17 @@ async function main(): Promise<void> {
   await installTargetNatives(staging, platform, arch)
   await pruneForeignNatives(staging, platform, arch)
   // Outside the deploy block: a `--skip-deploy` run reuses a closure that may
-  // predate this shim, and writing it is idempotent.
-  if (platform === 'win') {
-    await writeWindowsPnpmShim({ staging, executableName: `${PRODUCT_NAME}.exe`, prefix: PREFIX, dryRun: false })
-  }
-  // The pnpm command is an artifact, not a detail. `dsh plugin` spawns `pnpm`
-  // by bare name and the plugin hub points the child's PATH at this directory,
-  // so a closure that lost it ships a hub whose every Install button fails —
-  // which is invisible until somebody opens Settings on a machine that has
-  // never had pnpm. It went missing once already, to `fs.cp` resolving the
-  // symlink, and the build gave no sign.
-  const pnpmCommand = join(CLOSURE_BIN_RELATIVE, platform === 'win' ? 'pnpm.cmd' : 'pnpm')
-  for (const required of [RUNTIME_ENTRY_RELATIVE, RUNTIME_FRONTEND, pnpmCommand]) {
+  // predate these shims, and writing them is idempotent.
+  await writeClosureShims({ staging, platform, productName: PRODUCT_NAME, prefix: PREFIX, dryRun: false })
+  // These two commands are artifacts, not details. `dsh plugin` spawns `pnpm`
+  // by bare name and the plugin hub points the child's PATH at this directory;
+  // the shipped pnpm is a `#!/usr/bin/env node` script and pnpm's own launcher
+  // execs `node` again after it. A closure missing either ships a hub whose
+  // every Install button fails on a machine that has no Node of its own —
+  // which is invisible until somebody opens Settings. The pnpm command went
+  // missing once already, to `fs.cp` resolving the symlink, with no sign.
+  const commands = [pnpmCommandRelative(platform), nodeCommandRelative(platform)]
+  for (const required of [RUNTIME_ENTRY_RELATIVE, RUNTIME_FRONTEND, ...commands]) {
     if (!existsSync(join(staging, required))) throw new Error(`${PREFIX}: the deployed closure is missing ${required}.`)
   }
   for (const marker of nativeMarkers(platform, arch)) {

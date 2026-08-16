@@ -33,26 +33,30 @@ local 模式把 `@deepseek-ai/dsh` 和 API 客户端用 `link:` 指到一个 har
 
 ## 它内置的插件
 
-安装程序带 [`omdsh-plughub`](https://github.com/omdsh-plugins/omdsh-plughub)，而且刻意只带它一个。
+安装程序带 [`omdsh-plughub`](https://github.com/omdsh-plugins/omdsh-plughub) 和 [`omdsh-base`](https://github.com/omdsh-plugins/omdsh-base)。两者在这里的理由不同，而且都不能推广到第三个。
 
-它在这里，是因为它是唯一一个没法用它自己提供的机制装上的插件。装插件这件事就是在终端里 `dsh plugin --profile web add <package>`，而一台刚跑完安装程序的机器，`PATH` 上根本没有 `dsh`——所以一个刚装好的应用打开来，会是一个没有任何途径去装第二个插件的 harness。
+**hub 是唯一一个没法用它自己提供的机制装上的插件。** 装插件这件事就是在终端里 `dsh plugin --profile web add <package>`，而一台刚跑完安装程序的机器，`PATH` 上根本没有 `dsh`——所以一个刚装好的应用打开来，会是一个没有任何途径去装第二个插件的 harness。
 
-往后的每一个插件，hub 都装得了；而一个被冻进安装程序的插件，就被钉在了这个应用的发版节奏上，与此同时依赖它的那些包却在自由更新。`omdsh-base` 是最清楚的例子：它是每一个模式插件的 `peerDependency`，而 profile 是以 `autoInstallPeers: false` 安装的，所以装一个模式插件并不会把它带进来。那是一份可发现性上的代价，交给 hub 去补更合适——缺了它的模式插件是静默地不工作，而不是让页面失败——它不构成把一个共享库冻在这里的理由。
+**模式系统是那个没人会自动装上的 peer。** 它自己不贡献任何模式，单独装也不显示任何开关；它是所有模式插件注册进去的那个注册表，而每个模式插件都把它声明成 `peerDependency`。profile 是以 `autoInstallPeers: false` 安装的，所以通过 hub 装 Chat 或 Code **不会**把它带进来，而缺了它的模式插件是静默加载的——没有开关、没有分段、也没有报错。带上它，意味着点一次就能得到一个真的能用的模式，而不是一个悄无声息的。
 
-交付哪些 bundle 只声明一处，就是 catalog 里那些 `@omdsh-plugins/*` 条目。
+代价是真实的，也值得写明：一个共享库进了安装程序，就被钉在了这个应用的发版节奏上，而依赖它的那些包仍在自由更新。有两件事让这个代价咬不动。一是它的依赖方都以 `*` 声明它，所以它的任何版本都不会卡住其中任何一个；二是 hub 可以把一份更新的副本装进 profile 自己的目录，那个位置在解析路径上比这个应用链过去的那份更近，所以一次安装永远不会被内置的那份锁死。
+
+这两个之外的每一个插件，hub 都装得了；上面这套理由，就是第三个插件要进来必须先挣到的东西。
+
+交付哪些 bundle 声明在 catalog 里那些 `@omdsh-plugins/*` 条目上，而 `runtime/package.json` 必须以同一个版本把它们全写上——今天是 `omdsh-base` 和 `omdsh-plughub`，都是 `0.1.1`。写两处的理由和 harness 版本号写两处一样：闭包是装在这个工作区之外的，那里 `catalog:` 引用无处可解。
 
 ```sh
-pnpm run check:plugin-pin       # runtime manifest 处在一份裸克隆装得上的状态
-pnpm run plugins:npm            # 交付已发布的版本
+pnpm run check:plugin-pin       # runtime manifest 和 catalog 指向同一个版本
+pnpm run plugins:npm            # 交付已发布的版本（默认）
 pnpm run plugins:local ..       # 改为交付同级检出
-pnpm run plugins:none           # 一个都不带，也就是当前提交的状态
+pnpm run plugins:none           # 一个都不带
 ```
 
-**默认构建一个插件都不带，而这正是今天提交的状态**，因为 `@omdsh-plugins/omdsh-plughub` 既没发到 npm 也没推上 GitHub——不存在任何一个"只克隆这个仓库"就能解析的 specifier。打包每一次都会把这件事打印出来。要构建一个真的带着 hub 的安装程序，先跑 `plugins:local ..`；等这个包发布了，`plugins:npm` 会让它成为默认。
+默认构建两个都带着，而且打包每一次都会把"这一趟带了什么"打印出来。
 
-**刻意不提交的是一条 `link:`。** pnpm 把它按声明它的那份 manifest 解析，所以一份没有同级检出的克隆只会 WARN、退出码 0，然后留下一条断链——打包再把这条断链带进 `.app`，最后 macOS 直接拒绝给这个包签名。`check:plugin-pin` 就是为此对它失败的，CONVENTIONS 第 8 条说的是同一件事。
+**永远不该提交的是一条 `link:`。** pnpm 把它按声明它的那份 manifest 解析，所以一份没有同级检出的克隆只会 WARN、退出码 0，然后留下一条断链——打包再把这条断链带进 `.app`，最后 macOS 直接拒绝给这个包签名。`check:plugin-pin` 就是为此对它失败的，CONVENTIONS 第 8 条说的是同一件事。要拿未发布的插件改动打包就用 `plugins:local ..`，提交前切回 `plugins:npm`。
 
-除此之外，本地 bundle 不给打包添任何麻烦：`scripts/bundled-plugins.ts` 会把每一个先打成 tarball，闭包再从 tarball 装，所以进到产物里的是实打实的文件。`pnpm pack` 会跑各自的 `prepare`，所以那些检出必须先装好。
+除此之外，本地 bundle 不给打包添任何麻烦：`scripts/bundled-plugins.ts` 会把每一个先打成 tarball，闭包再从 tarball 装，所以进到产物里的是实打实的文件而不是软链。`pnpm pack` 会跑各自的 `prepare`，所以那些检出必须先装好。而一个版本号根本不需要这一套——pnpm 从 registry 解析它，和别的包没两样。
 
 ### 一个内置 bundle 是怎么进到 profile 里的
 
@@ -74,7 +78,7 @@ profile 本身不由这里写。它不存在时，启动器会被以 `--dump-def
 
 ## 外壳不负责什么
 
-运行时就是窗口旁边的那一个，仅此而已。从另一台主机提供服务，以及"显示 harness"之外的每一项能力，都是运行时该通过插件长出来的东西，而不是外壳绕过它去够的东西。安装程序把这句话坐实了，而不是推翻它：它在闭包里带上了 [`omdsh-plughub`](https://github.com/omdsh-plugins/omdsh-plughub)，因为一台刚跑完安装程序的机器，`PATH` 上没有 `dsh`，也就没有办法装上第一个插件。那是运行时加载的一个 bundle，不是外壳自己持有的能力。打包流水线内嵌的那个闭包，是这里的 [`scripts/runtime-closure.ts`](scripts/runtime-closure.ts) 构建的。
+运行时就是窗口旁边的那一个，仅此而已。从另一台主机提供服务，以及"显示 harness"之外的每一项能力，都是运行时该通过插件长出来的东西，而不是外壳绕过它去够的东西。安装程序把这句话坐实了，而不是推翻它：它在闭包里带上了插件——带 hub 是因为一台刚跑完安装程序的机器，`PATH` 上没有 `dsh`，也就没有办法装上第一个。那些是运行时加载的 bundle，不是外壳自己持有的能力。打包流水线内嵌的那个闭包，是这里的 [`scripts/runtime-closure.ts`](scripts/runtime-closure.ts) 构建的。
 
 ## 键盘映射
 
@@ -124,10 +128,10 @@ pnpm run test               # vitest
 pnpm run check:harness-pin  # runtime manifest 和 catalog 指向同一个版本
 pnpm run harness:npm        # 对着已发布的版本构建（默认）
 pnpm run harness:local ../../deepseek-harness   # 对着同级检出构建
-pnpm run check:plugin-pin   # runtime manifest 处在一份裸克隆装得上的状态
-pnpm run plugins:npm        # 交付已发布的版本
+pnpm run check:plugin-pin   # runtime manifest 和 catalog 指向同一个版本
+pnpm run plugins:npm        # 交付已发布的版本（默认）
 pnpm run plugins:local ..   # 改为交付同级检出
-pnpm run plugins:none       # 一个都不带（当前提交的状态）
+pnpm run plugins:none       # 一个都不带
 pnpm run package:desktop    # 完整产物
 pnpm run clean              # 删掉 app/lib、dist-desktop 和那些 tsbuildinfo
 ```
@@ -156,7 +160,7 @@ pnpm run package:desktop -- --skip-deploy --skip-smoke --skip-dmg --skip-install
 - **只有 macOS 和 Windows。** 打包对任何其他宿主直接拒绝，而且也没有 Linux 目标可以要：产物就是一个 `.dmg` 和一个 NSIS 安装程序。构建和交付两头都不支持 Linux。
 - **Windows 产物可以在 macOS 上打，但没法在那里验证。** 可选原生模块是预构建的，NSIS 目标也不需要 Wine，所以打包本身能成——但 Windows 的 Electron 二进制在 macOS 上跑不起来，于是引导冒烟被跳过，产物是没冒过烟的。macOS 产物则必须要一台 macOS 宿主。
 - **交叉构建的 Windows 闭包，`pnpm.cmd` 是手写进去的。** pnpm 只按"自己跑在哪个平台"生成 `.bin` 条目，所以从 macOS 打出来的 Windows 闭包里全是 POSIX 软链——Windows 执行不了，hub 也不会去找它。`scripts/runtime-closure.ts` 负责写这个 shim，缺了它打包会直接失败；但 shim 本身只在 Windows 上被人手动跑过，从来没有冒烟测过。
-- **在 Windows 上，从 git specifier 装的插件仍然需要一套真的工具链。** 这个 shim 让打包好的 pnpm 能跑起来（通过应用自己的二进制），这对 registry 安装够了——它根本不做构建。而 git 上的插件会在 `prepare` 里自己构建，那需要一个包里没有的 `node.exe`。**刻意没有**一并写 `node.cmd`：它同样会被放到子进程 `PATH` 的最前面，于是一个跑 `tsdown` 的 `prepare` 会变成"加载不了 Rolldown 的 Node-ABI 原生模块"，而不是"找不到 Node"——结果一样，报错更难懂。真正解决它的是把插件发布出去，不是再加一个 shim。
+- **从 git specifier 装的插件，可能以任何白名单都够不着的方式失败。** git 包的 `prepare` 会在 pnpm store 下面跑一次嵌套 `pnpm install` 去取该插件的 devDependencies；如果被拦的是那次嵌套安装，报出来的是 `ERR_PNPM_PREPARE_PACKAGE`，而 profile 的 `allowBuilds` 对那个目录不生效。绕开它的办法是把插件发布出去——registry 安装下载的是构建好的树，根本不做构建。（构建本身在内置的 Node 下是没问题的：`tsdown` 和它的 Rolldown 原生模块在 `ELECTRON_RUN_AS_NODE` 下能正常加载，因为那是 N-API，跨 Node 与 Electron ABI 稳定。）
 - **没有任何一件东西带着平台信任的证书。** macOS 包是即席签名而非公证，Windows 安装程序未签名，所以除了构建它的那台机器，别的机器上都要走一遍 `## 安装` 里的那一步。
 - **运行时在本地回环上以操作系统分配的端口提供服务，且没有认证**，这与 `dsh web` 已有的姿态一致：任何以同一用户身份运行的进程都能触及那个 API。
 - **没有 CI 门禁覆盖这个应用。** 打包需要 macOS 或 Windows，驱动外壳需要一个窗口会话，所以本机打包时那次引导冒烟，就是它所交付闭包的全部证明。

@@ -22,7 +22,7 @@ macOS 与 Windows 桌面应用：一个 Electron 外壳，监管一个内嵌的 
 
 ## 安装程序随身带的插件
 
-[`src/bundled-plugins.ts`](src/bundled-plugins.ts) 在监管器启动之前跑一次，把这次构建交付的 bundle 提供给 profile——今天是插件中心，也就是那个唯一没法用它自己提供的机制装上的插件。交付了哪些 bundle 是在闭包里发现的，而不是在这里列出来的，所以新增一个就只是 `runtime/package.json` 的一条依赖，再无其他。
+[`src/bundled-plugins.ts`](src/bundled-plugins.ts) 在监管器启动之前跑一次，把这次构建交付的 bundle 提供给 profile——今天是插件中心（没法用它自己提供的机制装上）和模式系统（每个模式插件都把它声明成 peer，而没有任何东西会自动装它）。交付了哪些 bundle 是在闭包里发现的，而不是在这里列出来的，所以新增一个就只是 `runtime/package.json` 的一条依赖，再无其他。
 
 | 关注点 | 行为 |
 |---|---|

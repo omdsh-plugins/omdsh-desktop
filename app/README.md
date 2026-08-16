@@ -22,7 +22,7 @@ The shell adds no harness capability. It reuses the shipped Web surface verbatim
 
 ## The plugins the installer carries
 
-[`src/bundled-plugins.ts`](src/bundled-plugins.ts) runs once before the supervisor starts, and offers the profile the bundles this build ships — today the plugin hub, which is the one plugin that cannot be installed by the mechanism it provides. Which bundles those are is discovered in the closure rather than listed here, so adding one is a `runtime/package.json` dependency and nothing else.
+[`src/bundled-plugins.ts`](src/bundled-plugins.ts) runs once before the supervisor starts, and offers the profile the bundles this build ships — today the plugin hub, which cannot be installed by the mechanism it provides, and the mode system, which every mode plugin declares as a peer and nothing auto-installs. Which bundles those are is discovered in the closure rather than listed here, so adding one is a `runtime/package.json` dependency and nothing else.
 
 | Concern | Behavior |
 |---|---|
