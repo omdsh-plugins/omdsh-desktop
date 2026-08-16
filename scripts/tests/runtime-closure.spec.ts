@@ -1,11 +1,12 @@
 /**
  * The commands a shipped closure needs and pnpm does not leave behind: the
- * `node` the bundled pnpm's own shebang looks for, and the Windows `pnpm.cmd`
- * a cross-built closure never gets.
+ * `node` the bundled pnpm's own shebang looks for, package-manager commands
+ * for git dependency preparation, and the Windows `pnpm.cmd` a cross-built
+ * closure never gets.
  */
 
 import { describe, expect, it } from 'vitest'
-import { closureShims, launcherFromBin, nodeCommandRelative, patchDirectoryPickerWorkerSource, pnpmCommandRelative, posixNodeShim, windowsShim } from '../runtime-closure.ts'
+import { closureShims, launcherFromBin, nodeCommandRelative, npmCommandRelative, patchDirectoryPickerWorkerSource, pnpmCommandRelative, posixNodeShim, posixPackageManagerShim, windowsShim } from '../runtime-closure.ts'
 
 const PRODUCT = 'DeepSeek Harness'
 
@@ -63,6 +64,11 @@ describe('windowsShim', () => {
     expect(shim).toContain('"%~dp0..\\pnpm\\bin\\pnpm.mjs"')
   })
 
+  it('uses the shipped pnpm when git preparation falls back to npm', () => {
+    const shim = body('win', 'npm.cmd')
+    expect(shim).toContain('"%~dp0..\\pnpm\\bin\\pnpm.mjs"')
+  })
+
   it('quotes the executable, whose name has a space in it', () => {
     const line = body('win', 'node.cmd').split('\r\n').find(entry => entry.startsWith('"%~dp0'))
     expect(line).toContain('DeepSeek Harness.exe"')
@@ -85,12 +91,12 @@ describe('windowsShim', () => {
 })
 
 describe('closureShims', () => {
-  it('writes node and pnpm on Windows, where pnpm left nothing runnable', () => {
-    expect(closureShims('win', PRODUCT).map(shim => shim.name)).toEqual(['node.cmd', 'pnpm.cmd'])
+  it('writes node, pnpm, and the npm compatibility command on Windows', () => {
+    expect(closureShims('win', PRODUCT).map(shim => shim.name)).toEqual(['node.cmd', 'pnpm.cmd', 'npm.cmd'])
   })
 
-  it('writes only node on macOS, where pnpm\'s own symlink runs once node resolves', () => {
-    expect(closureShims('mac', PRODUCT).map(shim => shim.name)).toEqual(['node'])
+  it('adds npm on macOS, where pnpm itself already has a runnable symlink', () => {
+    expect(closureShims('mac', PRODUCT).map(shim => shim.name)).toEqual(['node', 'npm'])
   })
 })
 
@@ -100,13 +106,29 @@ describe('the commands packaging asserts', () => {
     expect(pnpmCommandRelative('mac')).toBe('node_modules/.bin/pnpm')
     expect(nodeCommandRelative('win')).toBe('node_modules/.bin/node.cmd')
     expect(nodeCommandRelative('mac')).toBe('node_modules/.bin/node')
+    expect(npmCommandRelative('win')).toBe('node_modules/.bin/npm.cmd')
+    expect(npmCommandRelative('mac')).toBe('node_modules/.bin/npm')
   })
 
   it('asserts every shim it writes', () => {
     for (const platform of ['mac', 'win'] as const) {
       const written = new Set(closureShims(platform, PRODUCT).map(shim => `node_modules/.bin/${shim.name}`))
       expect(written.has(nodeCommandRelative(platform))).toBe(true)
+      expect(written.has(npmCommandRelative(platform))).toBe(true)
     }
+  })
+})
+
+describe('posixPackageManagerShim', () => {
+  const shim = posixPackageManagerShim(launcherFromBin('mac', PRODUCT), '../pnpm/bin/pnpm.mjs')
+
+  it('forwards npm-compatible git preparation calls to the shipped pnpm', () => {
+    expect(shim).toContain('ELECTRON_RUN_AS_NODE=1')
+    expect(shim).toContain('"$(dirname "$0")/../pnpm/bin/pnpm.mjs" "$@"')
+  })
+
+  it('is executable in the packaged closure', () => {
+    expect(closureShims('mac', PRODUCT).find(entry => entry.name === 'npm')?.mode).toBe(0o755)
   })
 })
 
