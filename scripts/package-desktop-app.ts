@@ -777,7 +777,7 @@ async function main(): Promise<void> {
   // Outside the deploy block: a `--skip-deploy` run reuses a closure that may
   // predate these shims, and writing them is idempotent.
   await writeClosureShims({ staging, platform, productName: PRODUCT_NAME, prefix: PREFIX, dryRun: false })
-  // rc.6's published Win32 dialog worker disconnects after its first
+  // The published Win32 dialog worker disconnects after its first
   // non-terminal `showing` message. Keep this outside the deploy block too, so
   // reusing a previously staged closure cannot put the crash back in the app.
   await patchDirectoryPickerWorker(staging, PREFIX)

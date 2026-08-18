@@ -1,0 +1,43 @@
+diff --git a/lib/worker.cjs b/lib/worker.cjs
+--- a/lib/worker.cjs
++++ b/lib/worker.cjs
+@@ -19,10 +19,7 @@
+ * on real Windows — so view the memory directly instead.
+ */
+ function readUtf16(koffi, address) {
+-	const bytes = Buffer.from(koffi.view(address, 32768));
+-	let end = 0;
+-	while (end + 1 < bytes.length && bytes[end] !== 0) end += 2;
+-	return bytes.toString("utf16le", 0, end);
++	return koffi.decode.string16(address);
+ }
+ const COINIT_APARTMENTTHREADED = 2;
+ const CLSCTX_INPROC_SERVER = 1;
+@@ -204,10 +201,10 @@
+ if (title === "") throw new Error("win32-dialog-worker: DSH_DIALOG_TITLE is required");
+ if (process.send === void 0) throw new Error("win32-dialog-worker must run as a child process with an IPC channel");
+ const send = process.send.bind(process);
+-const post = (message) => {
++const post = (message, terminal = false) => {
+ 	/* v8 ignore next 3 -- disconnect needs a live IPC channel the unit lane must not sever (built-worker.e2e.ts owns the real close path). */
+ 	send(message, () => {
+-		if (process.connected) process.disconnect();
++		if (terminal && process.connected) process.disconnect();
+ 	});
+ };
+ /* v8 ignore next 3 -- the handler exits(0), which would kill the unit lane; built-worker.e2e.ts owns the real disconnect lifecycle. */
+@@ -222,12 +219,12 @@
+ 					threadId
+ 				});
+ 			})
+-		});
++		}, true);
+ 	} catch (error) {
+ 		post({
+ 			kind: "error",
+ 			message: error instanceof Error ? error.stack ?? error.message : String(error)
+-		});
++		}, true);
+ 	}
+ })();
+ //#endregion

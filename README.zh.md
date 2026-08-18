@@ -10,8 +10,8 @@
 
 | 平台 | 安装包 |
 |---|---|
-| **macOS 13 及以上，Apple 芯片** | [DeepSeek-Harness-0.1.0-rc.6-arm64.dmg](https://github.com/omdsh-plugins/omdsh-desktop/releases/download/v0.1.0-rc.6/DeepSeek-Harness-0.1.0-rc.6-arm64.dmg) · 211 MB |
-| **Windows 64 位** | [DeepSeek-Harness-0.1.0-rc.6-x64-setup.exe](https://github.com/omdsh-plugins/omdsh-desktop/releases/download/v0.1.0-rc.6/DeepSeek-Harness-0.1.0-rc.6-x64-setup.exe) · 134 MB |
+| **macOS 13 及以上，Apple 芯片** | [DeepSeek-Harness-0.1.0-rc.7-arm64.dmg](https://github.com/omdsh-plugins/omdsh-desktop/releases/download/v0.1.0-rc.7/DeepSeek-Harness-0.1.0-rc.7-arm64.dmg) · 208 MB |
+| **Windows 64 位** | [DeepSeek-Harness-0.1.0-rc.7-x64-setup.exe](https://github.com/omdsh-plugins/omdsh-desktop/releases/download/v0.1.0-rc.7/DeepSeek-Harness-0.1.0-rc.7-x64-setup.exe) · 134 MB |
 
 上面两个链接锁定的是某一次构建；**[发布页](https://github.com/omdsh-plugins/omdsh-desktop/releases/latest)** 上永远是最新的那一版。机器上不需要再装别的——harness 运行时、插件中心、模式系统都在安装包里。
 
@@ -30,7 +30,7 @@
 
 ## 它内置的 harness 版本
 
-三个文件写着它，而且写的是同一个，今天是 `0.1.0-rc.6`——第三个是应用自己的版本号，因为产物的文件名就是告诉别人"里面装的是哪个运行时"的东西。`runtime/package.json` 是打包流水线真正去安装的那一份：它是工作区之外的一个部署根，那里 `catalog:` 引用无处可解，所以版本号在这里是字面重述一遍的。`pnpm-workspace.yaml` 的 catalog 则是 `app` 解析 API 客户端所依据的那一份。`pnpm run check:harness-pin` 就是这两者一致的证明——只要其中任何一个还挂着 `link:`，它就失败。
+三个文件写着它，而且写的是同一个，今天是 `0.1.0-rc.7`——第三个是应用自己的版本号，因为产物的文件名就是告诉别人"里面装的是哪个运行时"的东西。`runtime/package.json` 是打包流水线真正去安装的那一份：它是工作区之外的一个部署根，那里 `catalog:` 引用无处可解，所以版本号在这里是字面重述一遍的。`pnpm-workspace.yaml` 的 catalog 则是 `app` 解析 API 客户端所依据的那一份。`pnpm run check:harness-pin` 就是这两者一致的证明——只要其中任何一个还挂着 `link:`，它就失败。
 
 工作区把那个版本装在 `runtime/` 下，所以从检出运行时监管的运行时，和打好包的那个内嵌的是同一个——这正是"从源码跑起来"具有代表性的原因。打包读的也是同一个文件。
 
@@ -44,7 +44,7 @@ pnpm run harness:local ../../deepseek-harness   # 改为对着同级检出构建
 
 上游发了新版本时，`harness:latest` 就是全部动作：读 registry 上有什么、拒绝任何不比当前 pin 更新的东西、要求 API 客户端**发布了同一个 release**，然后写两条 catalog 条目，再做 `harness:npm` 做的事。`check:harness-outdated` 是同样的读取但不写，所以定时任务可以用它来说"有个新版本在等着"。
 
-两者都**不看 `latest` dist-tag**，这不是为谨慎而谨慎：`@deepseek-ai/dsh-host-apiproxy` 已经发布了 `0.1.0-rc.6`，而它的 `latest` 还指着 `0.0.1-rc.1`——一条相信这个 tag 的命令，会告诉你这个应用得把 API 客户端往回退一个 minor 版本。
+两者都**不看 `latest` dist-tag**，这不是为谨慎而谨慎：`@deepseek-ai/dsh-host-apiproxy` 已经发布了 `0.1.0-rc.7`，而它的 `latest` 还指着 `0.0.1-rc.1`——一条相信这个 tag 的命令，会告诉你这个应用得把 API 客户端往回退一个 minor 版本。
 
 `harness:npm` 会把 `package.json` 和 `app/package.json` 的版本号设成它所指向的那个 release，而 `check:harness-pin` 在两者漂移时失败——所以换一个 harness 版本是**一条命令**，而不是一条命令外加一处得靠人记住的 manifest 编辑。同一个 release 的重新构建叫 `<release>+<n>`：semver 在比较优先级时忽略 build metadata，这正好对——那样的构建不是一个更新的 release。
 
@@ -52,7 +52,7 @@ local 模式把 `@deepseek-ai/dsh` 和 API 客户端用 `link:` 指到一个 har
 
 ## 它内置的插件
 
-安装程序带 [`omdsh-plughub`](https://github.com/omdsh-plugins/omdsh-plughub) 和 [`omdsh-base`](https://github.com/omdsh-plugins/omdsh-base)。两者在这里的理由不同，而且都不能推广到第三个。
+安装程序带 [`omdsh-plughub`](https://github.com/omdsh-plugins/omdsh-plughub) 和 [`omdsh-basemode`](https://github.com/omdsh-plugins/omdsh-basemode)。两者在这里的理由不同，而且都不能推广到第三个。
 
 **hub 是唯一一个没法用它自己提供的机制装上的插件。** 装插件这件事就是在终端里 `dsh plugin --profile web add <package>`，而一台刚跑完安装程序的机器，`PATH` 上根本没有 `dsh`——所以一个刚装好的应用打开来，会是一个没有任何途径去装第二个插件的 harness。
 
@@ -62,7 +62,7 @@ local 模式把 `@deepseek-ai/dsh` 和 API 客户端用 `link:` 指到一个 har
 
 这两个之外的每一个插件，hub 都装得了；上面这套理由，就是第三个插件要进来必须先挣到的东西。
 
-交付哪些 bundle 声明在 catalog 里那些 `@omdsh-plugins/*` 条目上，而 `runtime/package.json` 必须以同一个版本把它们全写上——今天是 `omdsh-base` 0.1.3 和 `omdsh-plughub` 0.1.3。写两处的理由和 harness 版本号写两处一样：闭包是装在这个工作区之外的，那里 `catalog:` 引用无处可解。
+交付哪些 bundle 声明在 catalog 里那些 `@omdsh-plugins/*` 条目上，而 `runtime/package.json` 必须以同一个版本把它们全写上——今天是 `omdsh-basemode` 0.2.0 和 `omdsh-plughub` 0.2.2。写两处的理由和 harness 版本号写两处一样：闭包是装在这个工作区之外的，那里 `catalog:` 引用无处可解。
 
 ```sh
 pnpm run check:plugin-pin       # runtime manifest 和 catalog 指向同一个版本

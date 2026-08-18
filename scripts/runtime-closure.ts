@@ -28,11 +28,11 @@ import { runCommand } from './run-command.ts'
 /** The closure's command directory, relative to its root. */
 export const CLOSURE_BIN_RELATIVE = 'node_modules/.bin'
 
-/** The published Win32 folder-dialog worker that needs the rc.6 IPC lifecycle fix. */
+/** The published Win32 folder-dialog worker that needs the IPC lifecycle fix. */
 export const DIRECTORY_PICKER_WORKER_RELATIVE = 'node_modules/@deepseek-ai/dsh-host-directory-picker-native/lib/worker.cjs'
 
 /**
- * Repair the rc.6 worker's premature IPC disconnect.
+ * Repair the published worker's premature IPC disconnect.
  *
  * The worker first posts a non-terminal `showing` message. The published build
  * disconnects after every post, so that first acknowledgement triggers its own
@@ -54,7 +54,7 @@ export function patchDirectoryPickerWorkerSource(source: string): string {
   ].join('\n')
   if (!patched.includes('return koffi.decode.string16(address);')) {
     if (!patched.includes(unsafeStringDecode)) {
-      throw new Error('the directory-picker worker no longer matches the reviewed rc.6 string decoder; update its packaging patch')
+      throw new Error('the directory-picker worker no longer matches the reviewed string decoder; update its packaging patch')
     }
     // A fixed 32 KiB view can cross the COM allocation's readable pages and
     // fatally abort Electron. Koffi's NUL-terminated decoder reads only the
@@ -73,7 +73,7 @@ export function patchDirectoryPickerWorkerSource(source: string): string {
 
   for (const [before, after] of lifecycleReplacements) {
     if (!patched.includes(before)) {
-      throw new Error('the directory-picker worker no longer matches the reviewed rc.6 lifecycle; update its packaging patch')
+      throw new Error('the directory-picker worker no longer matches the reviewed lifecycle; update its packaging patch')
     }
     patched = patched.replace(before, after)
   }
