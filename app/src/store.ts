@@ -60,9 +60,9 @@ export class SettingsStore {
    * Bundles this shell has already offered to the harness profile.
    *
    * Kept here rather than in the profile because it records what this
-   * application DID, not what the profile holds: a bundle that appears in
-   * neither is one the user removed, and telling the two apart is the whole
-   * reason a shipped plugin can be uninstalled and stay uninstalled.
+   * application DID, not what the profile holds: a later build that stopped
+   * shipping one still has to revisit the row, or a name that no longer
+   * resolves stays on the stack and stops the launcher.
    * @returns the recorded names, or none when the file holds no usable list.
    */
   readOfferedBundles(): string[] {

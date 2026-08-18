@@ -73,7 +73,7 @@ describe('SettingsStore', () => {
     expect(new SettingsStore(path).readOfferedBundles()).toEqual([])
   })
 
-  it('remembers the bundles it has offered, which is what keeps a withdrawal withdrawn', () => {
+  it('remembers the bundles it has offered, so a later build can drop one it no longer ships', () => {
     const store = new SettingsStore(path)
     store.writeOfferedBundles(['@omdsh-plugins/omdsh-plughub'])
     expect(new SettingsStore(path).readOfferedBundles()).toEqual(['@omdsh-plugins/omdsh-plughub'])

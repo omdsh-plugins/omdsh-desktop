@@ -13,6 +13,7 @@ import { discoverBundledPlugins, resolveHome, seedBundledPlugins } from '../src/
 import { RUNTIME_PROFILE } from '../src/runtime-launch.ts'
 
 const HUB = '@omdsh-plugins/omdsh-plughub'
+const MODE = '@omdsh-plugins/omdsh-basemode'
 
 const roots: string[] = []
 
@@ -61,8 +62,26 @@ function home(root: string, bundles: readonly string[], extra: Record<string, un
 function listed(dshHome: string): string[] {
   const manifest = JSON.parse(
     readFileSync(join(dshHome, 'profiles', RUNTIME_PROFILE, 'package.json'), 'utf8'),
-  ) as { dsh?: { profile?: { bundles?: string[] } } }
+  ) as { dsh?: { profile?: { bundles?: string[]; disabled?: string[] } } }
   return manifest.dsh?.profile?.bundles ?? []
+}
+
+/** The bundles a profile manifest has parked. */
+function parked(dshHome: string): string[] {
+  const manifest = JSON.parse(
+    readFileSync(join(dshHome, 'profiles', RUNTIME_PROFILE, 'package.json'), 'utf8'),
+  ) as { dsh?: { profile?: { disabled?: string[] } } }
+  return manifest.dsh?.profile?.disabled ?? []
+}
+
+/** Park names on the profile without taking them off `bundles` yourself. */
+function writeDisabled(dshHome: string, names: readonly string[]): void {
+  const path = join(dshHome, 'profiles', RUNTIME_PROFILE, 'package.json')
+  const manifest = JSON.parse(readFileSync(path, 'utf8')) as {
+    dsh: { profile: { bundles: string[]; disabled?: string[] } }
+  }
+  manifest.dsh.profile.disabled = [...names]
+  writeFileSync(path, `${JSON.stringify(manifest, undefined, 2)}\n`)
 }
 
 /** Run one seeding pass with the noise discarded. */
@@ -174,14 +193,70 @@ describe('seedBundledPlugins', () => {
     expect(messages.join('')).toContain('did not initialize')
   })
 
-  it('does not re-add a bundle that was offered and removed', async () => {
+  it('puts back a bundle that was offered and removed, because a shipped plugin cannot be uninstalled', async () => {
     const root = scratch()
     const dshHome = home(root, [])
 
     const outcome = await seed({ runtimeRoot: closure(root), home: dshHome, offered: [HUB] })
 
+    expect(outcome.changed).toBe(true)
+    expect(listed(dshHome)).toEqual([HUB])
+  })
+
+  it('leaves a disabled bundle off the stack', async () => {
+    const root = scratch()
+    const runtimeRoot = closure(root)
+    writePackage(join(runtimeRoot, 'node_modules', ...MODE.split('/')), {
+      name: MODE,
+      version: '0.1.0',
+      dsh: { bundle: { patch: './cordis.patch.yml' } },
+    })
+    const dshHome = home(root, [HUB])
+    writeDisabled(dshHome, [MODE])
+    const messages: string[] = []
+
+    const outcome = await seed({
+      runtimeRoot,
+      home: dshHome,
+      offered: [HUB, MODE],
+      log: message => messages.push(message),
+    })
+
     expect(outcome.changed).toBe(false)
-    expect(listed(dshHome)).toEqual([])
+    expect(listed(dshHome)).toEqual([HUB])
+    expect(parked(dshHome)).toEqual([MODE])
+    expect(messages.join('')).toContain('is disabled')
+  })
+
+  it('puts a disabled hub back on the stack', async () => {
+    const root = scratch()
+    const dshHome = home(root, [])
+    writeDisabled(dshHome, [HUB])
+    const messages: string[] = []
+
+    const outcome = await seed({
+      runtimeRoot: closure(root),
+      home: dshHome,
+      offered: [HUB],
+      log: message => messages.push(message),
+    })
+
+    expect(outcome.changed).toBe(true)
+    expect(listed(dshHome)).toEqual([HUB])
+    expect(parked(dshHome)).toEqual([])
+    expect(messages.join('')).toContain('cannot be disabled')
+  })
+
+  it('clears a park mark when the hub is already listed', async () => {
+    const root = scratch()
+    const dshHome = home(root, [HUB])
+    writeDisabled(dshHome, [HUB])
+
+    const outcome = await seed({ runtimeRoot: closure(root), home: dshHome, offered: [HUB] })
+
+    expect(outcome.changed).toBe(true)
+    expect(listed(dshHome)).toEqual([HUB])
+    expect(parked(dshHome)).toEqual([])
   })
 
   it('records a bundle the profile already lists without rewriting the manifest', async () => {
@@ -235,6 +310,19 @@ describe('seedBundledPlugins', () => {
 
     expect(outcome.changed).toBe(false)
     expect(listed(dshHome)).toEqual([])
+  })
+
+  it('does not relink a bundle the profile has installed as a dependency', async () => {
+    const root = scratch()
+    const dshHome = home(root, [HUB], { dependencies: { [HUB]: '0.2.4' } })
+    const link = join(dshHome, 'profiles', 'node_modules', ...HUB.split('/'))
+    mkdirSync(join(dshHome, 'profiles', 'node_modules', '@omdsh-plugins'), { recursive: true })
+    const updated = join(root, 'user-updated')
+    symlinkSync(updated, link, process.platform === 'win32' ? 'junction' : undefined)
+
+    await seed({ runtimeRoot: closure(root), home: dshHome, offered: [HUB] })
+
+    expect(readlinkSync(link)).toBe(updated)
   })
 
   it('re-points a link left by a previous installation', async () => {

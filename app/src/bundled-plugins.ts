@@ -27,20 +27,19 @@
  * in. So this module links it there itself. The launcher only ever adds to
  * that directory (a name it does not know is left alone), so the link stands.
  *
- * ## Seeding is offered once, and withdrawal is honoured
+ * ## The hub stays on; an update is left alone
  *
- * A bundle this shell added and the user then took out of `dsh.profile.bundles`
- * must stay out; putting it back on the next launch would make the profile a
- * file the user does not own. So the append is gated on the shell's own record
- * of what it has already offered, and only the SYMLINK is maintained
- * unconditionally — the application it points into moves when the application
- * is replaced.
+ * Taking the hub out of `dsh.profile.bundles`, or parking it on
+ * `dsh.profile.disabled`, is treated as an uninstall or a disable — neither
+ * of which the hub accepts. The next launch puts it back on the stack and
+ * drops the park mark. Other shipped bundles can still leave the stack
+ * through Disable; this shell leaves those off.
  *
- * The hub itself will not offer to remove one of these: it marks a bundle
- * removable only when the profile depends on it, and a seeded bundle is a
- * layer the profile was given rather than a dependency pnpm installed. That is
- * the same tier the launcher's own bundles sit in, and the right one — a hub
- * that could uninstall itself would leave no way to put it back.
+ * An Update through the hub writes the package into the profile as a real
+ * dependency. That copy wins the Loader's walk, and this shell must not
+ * re-point the fallback symlink at the shipped tree or the next launch would
+ * undo the update. The symlink is maintained only while the profile does not
+ * already depend on the name.
  * @module @omdsh-plugins/omdsh-desktop/bundled-plugins
  */
 
@@ -64,6 +63,12 @@ import { RUNTIME_PROFILE } from './runtime-launch.ts'
  * drift apart. The hub has no dependents, so freezing it costs nothing.
  */
 export const BUNDLE_SCOPE = '@omdsh-plugins'
+
+/**
+ * The plugin that installs the rest. Seeded by this shell, and kept on the
+ * composed stack: it cannot be disabled or uninstalled from here.
+ */
+export const HUB_PACKAGE_NAME = `${BUNDLE_SCOPE}/omdsh-plughub`
 
 /** Directory under the Harness home holding every profile, as the launcher names it. */
 const PROFILES_DIR = 'profiles'
@@ -124,8 +129,26 @@ export interface SeedOutcome {
 
 /** The profile-manifest slice this module reasons about; every other field is preserved. */
 interface ProfileManifest {
-  dsh?: { profile?: { bundles?: string[] } & Record<string, unknown> } & Record<string, unknown>
+  dependencies?: Readonly<Record<string, unknown>>
+  dsh?: { profile?: { bundles?: string[]; disabled?: string[] } & Record<string, unknown> } & Record<string, unknown>
   [key: string]: unknown
+}
+
+/**
+ * The string names a profile-manifest list still holds, in first-seen order.
+ * @param value - a JSON array, or something else.
+ * @returns the non-empty strings.
+ */
+function stringList(value: unknown): string[] {
+  if (!Array.isArray(value)) return []
+  const seen = new Set<string>()
+  const out: string[] = []
+  for (const entry of value) {
+    if (typeof entry !== 'string' || entry === '' || seen.has(entry)) continue
+    seen.add(entry)
+    out.push(entry)
+  }
+  return out
 }
 
 /**
@@ -277,7 +300,10 @@ export async function seedBundledPlugins(options: SeedOptions): Promise<SeedOutc
     return { offered: options.offered, changed: false }
   }
 
-  const bundles = [...manifest.dsh?.profile?.bundles ?? []]
+  const bundles = stringList(manifest.dsh?.profile?.bundles)
+  const disabledList = stringList(manifest.dsh?.profile?.disabled)
+  const disabled = new Set(disabledList)
+  const dependencies = new Set(Object.keys(manifest.dependencies ?? {}))
   const offered = new Set(options.offered)
   let changed = false
 
@@ -289,7 +315,11 @@ export async function seedBundledPlugins(options: SeedOptions): Promise<SeedOutc
 
   for (const packageName of names) {
     const shipped = join(options.runtimeRoot, MODULE_FALLBACK_DIR, ...packageName.split('/'))
-    if (isBundleDirectory(shipped)) linkIntoModuleFallback(options.home, packageName, shipped, options.log)
+    if (dependencies.has(packageName)) {
+      options.log(`desktop: ${packageName} is a profile dependency; leaving the installed copy in place\n`)
+    } else if (isBundleDirectory(shipped)) {
+      linkIntoModuleFallback(options.home, packageName, shipped, options.log)
+    }
 
     const resolvable = resolutionCandidates(options, profileDir, packageName).some(isBundleDirectory)
     const listed = bundles.indexOf(packageName)
@@ -308,23 +338,39 @@ export async function seedBundledPlugins(options: SeedOptions): Promise<SeedOutc
 
     if (listed !== -1) {
       offered.add(packageName)
+      if (packageName === HUB_PACKAGE_NAME && disabled.has(packageName)) {
+        disabled.delete(packageName)
+        changed = true
+        options.log(`desktop: ${packageName} cannot be disabled; putting it back on the stack\n`)
+      }
       continue
     }
-    if (offered.has(packageName)) {
-      options.log(`desktop: ${packageName} was offered before and removed; leaving it out\n`)
+    if (disabled.has(packageName) && packageName !== HUB_PACKAGE_NAME) {
+      offered.add(packageName)
+      options.log(`desktop: ${packageName} is disabled; leaving it off the stack\n`)
       continue
     }
+    // Not parked, not listed: an uninstall, which a shipped bundle cannot
+    // be. The hub looks the same when someone parked it. Put it back.
+    // The first offer of a fresh profile is the same write.
     bundles.push(packageName)
+    const unparked = packageName === HUB_PACKAGE_NAME && disabled.delete(packageName)
     offered.add(packageName)
     changed = true
-    options.log(`desktop: added ${packageName} to the ${RUNTIME_PROFILE} profile\n`)
+    options.log(unparked
+      ? `desktop: ${packageName} cannot be disabled; putting it back on the stack\n`
+      : `desktop: added ${packageName} to the ${RUNTIME_PROFILE} profile\n`)
   }
 
   if (!changed) return { offered: [...offered], changed: false }
 
+  const nextDisabled = disabledList.filter(name => disabled.has(name))
+  const profile = { ...manifest.dsh?.profile, bundles }
+  if (nextDisabled.length === 0) delete profile.disabled
+  else profile.disabled = nextDisabled
   const next: ProfileManifest = {
     ...manifest,
-    dsh: { ...manifest.dsh, profile: { ...manifest.dsh?.profile, bundles } },
+    dsh: { ...manifest.dsh, profile },
   }
   try {
     writeFileSync(manifestPath, `${JSON.stringify(next, undefined, 2)}\n`)
