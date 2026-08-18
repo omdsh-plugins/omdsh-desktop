@@ -62,7 +62,7 @@ local 模式把 `@deepseek-ai/dsh` 和 API 客户端用 `link:` 指到一个 har
 
 这两个之外的每一个插件，hub 都装得了；上面这套理由，就是第三个插件要进来必须先挣到的东西。
 
-交付哪些 bundle 声明在 catalog 里那些 `@omdsh-plugins/*` 条目上，而 `runtime/package.json` 必须以同一个版本把它们全写上——今天是 `omdsh-basemode` 0.2.1 和 `omdsh-plughub` 0.2.4。写两处的理由和 harness 版本号写两处一样：闭包是装在这个工作区之外的，那里 `catalog:` 引用无处可解。这些版本就是 npm 上的发布版，所以单独克隆本仓库就能打包：`pnpm install && pnpm run build && pnpm run package:desktop` 会从 registry 拉它们，和拉 harness 本身一样。
+交付哪些 bundle 声明在 catalog 里那些 `@omdsh-plugins/*` 条目上，而 `runtime/package.json` 必须以同一个版本把它们全写上——今天是 `omdsh-basemode` 0.2.2 和 `omdsh-plughub` 0.2.4。写两处的理由和 harness 版本号写两处一样：闭包是装在这个工作区之外的，那里 `catalog:` 引用无处可解。这些版本就是 npm 上的发布版，所以单独克隆本仓库就能打包：`pnpm install && pnpm run build && pnpm run package:desktop` 会从 registry 拉它们，和拉 harness 本身一样。
 
 ```sh
 pnpm run check:plugin-pin         # runtime manifest 和 catalog 指向同一个版本

@@ -10,7 +10,7 @@ catalog:
   # packaging pipeline installs that manifest's closure outside this workspace,
   # where a `catalog:` reference has nothing to resolve against.
   # `pnpm run check:plugin-pin` proves the two agree.
-  '@omdsh-plugins/omdsh-basemode': 0.2.1
+  '@omdsh-plugins/omdsh-basemode': 0.2.2
   '@omdsh-plugins/omdsh-plughub': 0.2.4
 
 packages:
