@@ -10,8 +10,10 @@
  * Two sources, one switch — the same shape `scripts/harness-source.ts` gives
  * the harness release:
  *
- * - **registry** — each bundle is the catalogued published version. This is
- *   what a released artifact ships.
+ * - **registry** (the committed default) — each bundle is the catalogued
+ *   published version, fetched from npm when the closure is installed. A clone
+ *   of this repository alone can package: there is nothing to look up beside
+ *   it. `plugins:latest` is what moves those pins when a newer release exists.
  * - **local** — each bundle is a `link:` to a sibling checkout, so unreleased
  *   plugin work is what the shell composes. pnpm does not install a linked
  *   package's own dependencies, so those checkouts must be installed and built
@@ -31,7 +33,8 @@
  * a tarball before staging the closure — see `scripts/bundled-plugins.ts`.
  *
  * Run: `pnpm run plugins:local ..`, `pnpm run plugins:npm`,
- * `pnpm run plugins:none`, or `pnpm run check:plugin-pin`.
+ * `pnpm run plugins:latest`, `pnpm run plugins:none`,
+ * `pnpm run check:plugin-outdated`, or `pnpm run check:plugin-pin`.
  * @module @omdsh-plugins/omdsh-desktop/scripts/plugin-source
  */
 
@@ -41,11 +44,18 @@ import { join, relative, resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { parseArgs } from 'node:util'
 import { localPath } from './bundled-plugins.ts'
+import { compareReleases } from './harness-source.ts'
 
 const root = resolve(import.meta.dirname, '..')
 
 /** Diagnostic prefix on this script's logs and errors. */
 const PREFIX = 'plugin-source'
+
+/** Where a package's published versions are read from. */
+const REGISTRY = 'https://registry.npmjs.org'
+
+/** How long the registry has to answer before the command gives up. */
+const REGISTRY_TIMEOUT_MS = 15_000
 
 /** The npm scope the bundles this installer carries are published under. */
 export const BUNDLE_SCOPE = '@omdsh-plugins'
@@ -184,6 +194,91 @@ async function useRegistry(): Promise<void> {
   console.log(`${PREFIX}: run 'pnpm install'.`)
 }
 
+/**
+ * Every version one package has published.
+ *
+ * The whole list, never the `latest` tag — the same rule `harness-source`
+ * follows, and for the same reason: a dist-tag can lag the versions that
+ * exist, and a command that trusted it would pin this installer backwards.
+ * @param name - the package.
+ * @returns its published versions, unordered.
+ * @throws Error when the registry cannot be read.
+ */
+async function publishedVersions(name: string): Promise<string[]> {
+  const url = `${REGISTRY}/${name.replace('/', '%2F')}`
+  let response: Response
+  try {
+    response = await fetch(url, { signal: AbortSignal.timeout(REGISTRY_TIMEOUT_MS) })
+  } catch (error) {
+    throw new Error(`${PREFIX}: could not reach ${url}: ${error instanceof Error ? error.message : String(error)}`)
+  }
+  if (!response.ok) throw new Error(`${PREFIX}: ${url} answered ${String(response.status)}.`)
+  const document = await response.json() as { versions?: Record<string, unknown> }
+  const versions = Object.keys(document.versions ?? {})
+  if (versions.length === 0) throw new Error(`${PREFIX}: ${name} publishes no versions.`)
+  return versions
+}
+
+/**
+ * Rewrite one catalog entry in `pnpm-workspace.yaml`.
+ *
+ * Text surgery for the reason the catalog is read that way: the file is this
+ * repository's own settings plus its comments explaining them, and rewriting it
+ * through a YAML serializer to change two version strings would reformat the
+ * explanations along with them.
+ * @param name - the catalogued package.
+ * @param version - the version to record.
+ */
+async function setCatalogVersion(name: string, version: string): Promise<void> {
+  const path = join(root, 'pnpm-workspace.yaml')
+  const text = await readFile(path, 'utf8')
+  const escaped = name.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&')
+  const pattern = new RegExp(`^(\\s+'${escaped}':\\s*)(\\S+)(\\s*)$`, 'mu')
+  if (!pattern.test(text)) throw new Error(`${PREFIX}: pnpm-workspace.yaml catalog does not pin ${name}.`)
+  await writeFile(path, text.replace(pattern, `$1${version}$3`))
+}
+
+/**
+ * Move every catalogued bundle to the newest release npm has, or report that
+ * one exists.
+ *
+ * Each bundle moves on its own: the hub and the mode system do not share a
+ * version, so one publishing is not a reason to wait for the other. Never a
+ * downgrade, and `latest` is not consulted, so a mis-tagged package cannot
+ * walk this installer backwards.
+ *
+ * `--latest` also rewrites the runtime pin even when every catalog entry is
+ * already newest, because a checkout left on `link:` is otherwise a clone that
+ * cannot package. That rewrite is what `plugins:npm` already does.
+ * @param apply - false to report only, which is what a scheduled check wants.
+ * @throws Error when the registry cannot be read, or when `--outdated` finds a newer release.
+ */
+async function useLatest(apply: boolean): Promise<void> {
+  const catalog = await catalogedBundles()
+  const moves: { name: string; from: string; to: string }[] = []
+  for (const [name, current] of catalog) {
+    const newest = (await publishedVersions(name))
+      .reduce((best, candidate) => (compareReleases(candidate, best) > 0 ? candidate : best))
+    if (compareReleases(newest, current) > 0) moves.push({ name, from: current, to: newest })
+    else console.log(`${PREFIX}: ${name}@${current} is the newest published release.`)
+  }
+
+  if (!apply) {
+    if (moves.length === 0) {
+      console.log(`${PREFIX}: every catalogued bundle is the newest published release; nothing to do.`)
+      return
+    }
+    const list = moves.map(move => `${move.name}@${move.to} (this repository ships ${move.from})`).join('; ')
+    throw new Error(`${PREFIX}: ${list}; run 'pnpm run plugins:latest'.`)
+  }
+
+  for (const move of moves) {
+    await setCatalogVersion(move.name, move.to)
+    console.log(`${PREFIX}: moved the catalog for ${move.name} from ${move.from} to ${move.to}`)
+  }
+  await useRegistry()
+}
+
 /** Remove every catalogued bundle from the runtime manifest. */
 async function useNothing(): Promise<void> {
   const catalog = await catalogedBundles()
@@ -241,7 +336,7 @@ async function check(): Promise<void> {
     throw new Error(
       `${PREFIX}: ${RUNTIME_MANIFEST} names a path on this machine for ${linked.join(', ')}. `
       + "A clone without those checkouts installs it as a dangling symlink and packaging carries it into the .app; "
-      + "run 'pnpm run plugins:none' before committing, or 'pnpm run plugins:npm' once the package is published.",
+      + "run 'pnpm run plugins:npm' or 'pnpm run plugins:latest' before committing.",
     )
   }
   for (const packageName of absent) {
@@ -261,6 +356,8 @@ if (process.argv[1] !== undefined && import.meta.url === pathToFileURL(process.a
     options: {
       local: { type: 'boolean', default: false },
       npm: { type: 'boolean', default: false },
+      latest: { type: 'boolean', default: false },
+      outdated: { type: 'boolean', default: false },
       none: { type: 'boolean', default: false },
       check: { type: 'boolean', default: false },
     },
@@ -268,6 +365,8 @@ if (process.argv[1] !== undefined && import.meta.url === pathToFileURL(process.a
   })
 
   if (values.check) await check()
+  else if (values.outdated) await useLatest(false)
+  else if (values.latest) await useLatest(true)
   else if (values.npm) await useRegistry()
   else if (values.none) await useNothing()
   else if (values.local) {
@@ -275,5 +374,5 @@ if (process.argv[1] !== undefined && import.meta.url === pathToFileURL(process.a
     if (checkouts === undefined) throw new Error(`${PREFIX}: --local needs the directory holding the plugin checkouts.`)
     await useLocal(checkouts)
   }
-  else throw new Error(`${PREFIX}: pass --local <checkouts>, --npm, --none, or --check.`)
+  else throw new Error(`${PREFIX}: pass --local <checkouts>, --npm, --latest, --outdated, --none, or --check.`)
 }

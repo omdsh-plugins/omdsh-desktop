@@ -1,13 +1,13 @@
 {
   "name": "omdsh-desktop-runtime-pkg",
-  "description": "Dependency-only deploy root for the desktop application's embedded harness runtime. Its dependencies are the published harness release the .app ships, the package manager that release shells out to, and whichever omdsh bundles the installer carries — none until they are published; 'pnpm run plugins:local' adds them. pnpm resolves the whole closure from the registry.",
+  "description": "Dependency-only deploy root for the desktop application's embedded harness runtime. Its dependencies are the published harness release the .app ships, the package manager that release shells out to, and the published omdsh bundles the installer carries — fetched from npm, so a clone of this repository alone can package. 'pnpm run plugins:local' points them at sibling checkouts instead.",
   "version": "0.0.1",
   "private": true,
   "type": "module",
   "dependencies": {
     "@deepseek-ai/dsh": "0.1.0-rc.7",
     "pnpm": "11.21.0",
-    "@omdsh-plugins/omdsh-plughub": "link:../../omdsh-plughub",
-    "@omdsh-plugins/omdsh-basemode": "link:../../omdsh-basemode"
+    "@omdsh-plugins/omdsh-plughub": "0.2.4",
+    "@omdsh-plugins/omdsh-basemode": "0.2.1"
   }
 }

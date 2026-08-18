@@ -203,7 +203,7 @@ describe('seedBundledPlugins', () => {
     expect(listed(dshHome)).toEqual([HUB])
   })
 
-  it('leaves a disabled bundle off the stack', async () => {
+  it('puts a disabled mode system back on the stack', async () => {
     const root = scratch()
     const runtimeRoot = closure(root)
     writePackage(join(runtimeRoot, 'node_modules', ...MODE.split('/')), {
@@ -222,10 +222,10 @@ describe('seedBundledPlugins', () => {
       log: message => messages.push(message),
     })
 
-    expect(outcome.changed).toBe(false)
-    expect(listed(dshHome)).toEqual([HUB])
-    expect(parked(dshHome)).toEqual([MODE])
-    expect(messages.join('')).toContain('is disabled')
+    expect(outcome.changed).toBe(true)
+    expect(listed(dshHome)).toEqual([HUB, MODE])
+    expect(parked(dshHome)).toEqual([])
+    expect(messages.join('')).toContain('cannot be disabled')
   })
 
   it('puts a disabled hub back on the stack', async () => {

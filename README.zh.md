@@ -62,18 +62,22 @@ local 模式把 `@deepseek-ai/dsh` 和 API 客户端用 `link:` 指到一个 har
 
 这两个之外的每一个插件，hub 都装得了；上面这套理由，就是第三个插件要进来必须先挣到的东西。
 
-交付哪些 bundle 声明在 catalog 里那些 `@omdsh-plugins/*` 条目上，而 `runtime/package.json` 必须以同一个版本把它们全写上——今天是 `omdsh-basemode` 0.2.0 和 `omdsh-plughub` 0.2.2。写两处的理由和 harness 版本号写两处一样：闭包是装在这个工作区之外的，那里 `catalog:` 引用无处可解。
+交付哪些 bundle 声明在 catalog 里那些 `@omdsh-plugins/*` 条目上，而 `runtime/package.json` 必须以同一个版本把它们全写上——今天是 `omdsh-basemode` 0.2.1 和 `omdsh-plughub` 0.2.4。写两处的理由和 harness 版本号写两处一样：闭包是装在这个工作区之外的，那里 `catalog:` 引用无处可解。这些版本就是 npm 上的发布版，所以单独克隆本仓库就能打包：`pnpm install && pnpm run build && pnpm run package:desktop` 会从 registry 拉它们，和拉 harness 本身一样。
 
 ```sh
-pnpm run check:plugin-pin       # runtime manifest 和 catalog 指向同一个版本
-pnpm run plugins:npm            # 交付已发布的版本（默认）
-pnpm run plugins:local ..       # 改为交付同级检出
-pnpm run plugins:none           # 一个都不带
+pnpm run check:plugin-pin         # runtime manifest 和 catalog 指向同一个版本
+pnpm run check:plugin-outdated    # npm 上有比当前 pin 更新的版本时失败
+pnpm run plugins:latest           # 迁到它：catalog 和 runtime pin
+pnpm run plugins:npm              # 交付 catalog 里已发布的版本（默认）
+pnpm run plugins:local ..         # 改为交付同级检出
+pnpm run plugins:none             # 一个都不带
 ```
 
 默认构建两个都带着，而且打包每一次都会把"这一趟带了什么"打印出来。
 
-**永远不该提交的是一条 `link:`。** pnpm 把它按声明它的那份 manifest 解析，所以一份没有同级检出的克隆只会 WARN、退出码 0，然后留下一条断链——打包再把这条断链带进 `.app`，最后 macOS 直接拒绝给这个包签名。`check:plugin-pin` 就是为此对它失败的，CONVENTIONS 第 8 条说的是同一件事。要拿未发布的插件改动打包就用 `plugins:local ..`，提交前切回 `plugins:npm`。
+`plugins:latest` 就是 hub 或模式系统发了新版本时的全部动作：读 npm 上有什么、拒绝任何不比当前 pin 更新的东西、写 catalog，再做 `plugins:npm` 做的事。`check:plugin-outdated` 是同样的读取但不写。两者都不看 `latest` dist-tag。
+
+**永远不该提交的是一条 `link:`。** pnpm 把它按声明它的那份 manifest 解析，所以一份没有同级检出的克隆只会 WARN、退出码 0，然后留下一条断链——打包再把这条断链带进 `.app`，最后 macOS 直接拒绝给这个包签名。`check:plugin-pin` 就是为此对它失败的，CONVENTIONS 第 8 条说的是同一件事。要拿未发布的插件改动打包就用 `plugins:local ..`，提交前切回 `plugins:npm`（或 `plugins:latest`）。
 
 除此之外，本地 bundle 不给打包添任何麻烦：`scripts/bundled-plugins.ts` 会把每一个先打成 tarball，闭包再从 tarball 装，所以进到产物里的是实打实的文件而不是软链。`pnpm pack` 会跑各自的 `prepare`，所以那些检出必须先装好。而一个版本号根本不需要这一套——pnpm 从 registry 解析它，和别的包没两样。
 
@@ -91,7 +95,7 @@ pnpm run plugins:none           # 一个都不带
 
 seeding 在运行时启动之前跑，每个 bundle 只提供一次。外壳加过、而用户又从 `dsh.profile.bundles` 里拿掉的 bundle，会一直保持拿掉的状态——外壳把"自己提供过什么"记在它自己的设置文件里，所以这次撤除不会在下次启动时被推翻。它每次启动都会维护的是那条软链，因为换掉应用就是换掉链所指的东西；而一个被列出、却哪里都解析不到的 bundle 会被摘掉，因为那一种对启动器是致命的，不只是缺失。
 
-hub 会把一个被 seed 进来的 bundle 标成不可移除，而这是对的：它判定可移除的标准是"profile 是否依赖它"，而一个被 seed 的 bundle 是 profile 被给予的一层，不是 pnpm 装进来的一条依赖。那正是启动器自带的 `dsh-base` 和 `dsh-web-app` 所在的那一档——对一个 hub 来说也是对的那一档，否则它可以把自己卸掉，而且不留任何装回来的办法。
+hub 会把一个被 seed 进来的 bundle 标成不可移除，而这是对的：它判定可移除的标准是"profile 是否依赖它"，而一个被 seed 的 bundle 是 profile 被给予的一层，不是 pnpm 装进来的一条依赖。那正是启动器自带的 `dsh-base` 和 `dsh-web-app` 所在的那一档。插件中心和模式系统在 Update 把它们写成真实依赖之后仍留在这一档——前者否则可以把自己卸掉、不留任何装回来的办法，后者是那个没人会自动装上的 peer。
 
 profile 本身不由这里写。它不存在时，启动器会被以 `--dump-default-config` 跑一次，那会解析 profile 然后退出——大约三分之一秒——所以这个仓库不必自带一份 profile 模板的副本，而那份模板里的 pnpm 设置，恰恰决定了 hub 自己的安装行为。
 
@@ -147,10 +151,12 @@ pnpm run test               # vitest
 pnpm run check:harness-pin  # runtime manifest 和 catalog 指向同一个版本
 pnpm run harness:npm        # 对着已发布的版本构建（默认）
 pnpm run harness:local ../../deepseek-harness   # 对着同级检出构建
-pnpm run check:plugin-pin   # runtime manifest 和 catalog 指向同一个版本
-pnpm run plugins:npm        # 交付已发布的版本（默认）
-pnpm run plugins:local ..   # 改为交付同级检出
-pnpm run plugins:none       # 一个都不带
+pnpm run check:plugin-pin         # runtime manifest 和 catalog 指向同一个版本
+pnpm run check:plugin-outdated    # npm 上有比当前 pin 更新的 hub 或模式系统时失败
+pnpm run plugins:latest           # 把 pin 迁到那些版本
+pnpm run plugins:npm              # 交付 catalog 里已发布的版本（默认）
+pnpm run plugins:local ..         # 改为交付同级检出
+pnpm run plugins:none             # 一个都不带
 pnpm run package:desktop    # 完整产物
 pnpm run clean              # 删掉 app/lib、dist-desktop 和那些 tsbuildinfo
 ```

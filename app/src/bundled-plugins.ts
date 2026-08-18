@@ -27,13 +27,12 @@
  * in. So this module links it there itself. The launcher only ever adds to
  * that directory (a name it does not know is left alone), so the link stands.
  *
- * ## The hub stays on; an update is left alone
+ * ## Shipped bundles stay on; an update is left alone
  *
- * Taking the hub out of `dsh.profile.bundles`, or parking it on
- * `dsh.profile.disabled`, is treated as an uninstall or a disable — neither
- * of which the hub accepts. The next launch puts it back on the stack and
- * drops the park mark. Other shipped bundles can still leave the stack
- * through Disable; this shell leaves those off.
+ * Taking the hub or the mode system out of `dsh.profile.bundles`, or parking
+ * either on `dsh.profile.disabled`, is treated as an uninstall or a disable —
+ * neither of which they accept. The next launch puts them back on the stack
+ * and drops the park mark.
  *
  * An Update through the hub writes the package into the profile as a real
  * dependency. That copy wins the Loader's walk, and this shell must not
@@ -56,11 +55,13 @@ import { RUNTIME_PROFILE } from './runtime-launch.ts'
  * at launch. A list here would be a second place to change, and the failure
  * from forgetting it — a package that ships and is never composed — is silent.
  *
- * Today that is the plugin hub and deliberately nothing else. Everything past
- * it is a plugin the hub can install, and a plugin frozen into the installer
- * is pinned to this application's release cadence while the packages that
+ * Today that is the plugin hub and the mode system. Everything past those is
+ * a plugin the hub can install, and a plugin frozen into the installer is
+ * pinned to this application's release cadence while the packages that
  * depend on it update freely, which is how a shared library and its dependents
- * drift apart. The hub has no dependents, so freezing it costs nothing.
+ * drift apart. The hub has no dependents, so freezing it costs nothing; the
+ * mode system's dependents declare it as `*`, so freezing it does not block
+ * them, and an Update through the hub still wins the resolution walk.
  */
 export const BUNDLE_SCOPE = '@omdsh-plugins'
 
@@ -69,6 +70,24 @@ export const BUNDLE_SCOPE = '@omdsh-plugins'
  * composed stack: it cannot be disabled or uninstalled from here.
  */
 export const HUB_PACKAGE_NAME = `${BUNDLE_SCOPE}/omdsh-plughub`
+
+/**
+ * The mode registry every mode plugin registers into. Seeded by this shell
+ * for the same reason the hub is — installing Chat or Code does not bring
+ * it — and kept on the composed stack the same way.
+ */
+export const MODE_PACKAGE_NAME = `${BUNDLE_SCOPE}/omdsh-basemode`
+
+/**
+ * Whether a shipped bundle stays on the stack: Disable and Remove are
+ * refused, the next launch puts it back, and Update is the one write it
+ * still accepts.
+ * @param packageName - a bundle this application ships or once offered.
+ * @returns true for the hub and the mode system.
+ */
+function staysOnStack(packageName: string): boolean {
+  return packageName === HUB_PACKAGE_NAME || packageName === MODE_PACKAGE_NAME
+}
 
 /** Directory under the Harness home holding every profile, as the launcher names it. */
 const PROFILES_DIR = 'profiles'
@@ -338,23 +357,23 @@ export async function seedBundledPlugins(options: SeedOptions): Promise<SeedOutc
 
     if (listed !== -1) {
       offered.add(packageName)
-      if (packageName === HUB_PACKAGE_NAME && disabled.has(packageName)) {
+      if (staysOnStack(packageName) && disabled.has(packageName)) {
         disabled.delete(packageName)
         changed = true
         options.log(`desktop: ${packageName} cannot be disabled; putting it back on the stack\n`)
       }
       continue
     }
-    if (disabled.has(packageName) && packageName !== HUB_PACKAGE_NAME) {
+    if (disabled.has(packageName) && !staysOnStack(packageName)) {
       offered.add(packageName)
       options.log(`desktop: ${packageName} is disabled; leaving it off the stack\n`)
       continue
     }
     // Not parked, not listed: an uninstall, which a shipped bundle cannot
-    // be. The hub looks the same when someone parked it. Put it back.
-    // The first offer of a fresh profile is the same write.
+    // be. The hub and the mode system look the same when someone parked
+    // them. Put it back. The first offer of a fresh profile is the same write.
     bundles.push(packageName)
-    const unparked = packageName === HUB_PACKAGE_NAME && disabled.delete(packageName)
+    const unparked = staysOnStack(packageName) && disabled.delete(packageName)
     offered.add(packageName)
     changed = true
     options.log(unparked

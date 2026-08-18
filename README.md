@@ -62,18 +62,22 @@ The cost is real and worth naming: a shared library in the installer is pinned t
 
 Everything past these two is a plugin the hub can install, and the reasoning above is what a third would have to earn.
 
-Which bundles ship is declared as the `@omdsh-plugins/*` entries of the catalog, and `runtime/package.json` must name all of them at the same version — `omdsh-basemode` at `0.2.0` and `omdsh-plughub` at `0.2.2` today. Two files, for the reason the harness release is also stated twice: the closure installs outside this workspace, where a `catalog:` reference has nothing to resolve against.
+Which bundles ship is declared as the `@omdsh-plugins/*` entries of the catalog, and `runtime/package.json` must name all of them at the same version — `omdsh-basemode` at `0.2.1` and `omdsh-plughub` at `0.2.4` today. Two files, for the reason the harness release is also stated twice: the closure installs outside this workspace, where a `catalog:` reference has nothing to resolve against. Those versions are npm releases, so a clone of this repository alone can package: `pnpm install && pnpm run build && pnpm run package:desktop` fetches them from the registry like the harness itself.
 
 ```sh
-pnpm run check:plugin-pin       # the runtime manifest and the catalog name one release
-pnpm run plugins:npm            # ship the published versions (the default)
-pnpm run plugins:local ..       # ship the sibling checkouts instead
-pnpm run plugins:none           # ship none
+pnpm run check:plugin-pin         # the runtime manifest and the catalog name one release
+pnpm run check:plugin-outdated    # fail when npm has a newer release than this pin
+pnpm run plugins:latest           # move to it: catalog and runtime pin
+pnpm run plugins:npm              # ship the catalogued published versions (the default)
+pnpm run plugins:local ..         # ship the sibling checkouts instead
+pnpm run plugins:none             # ship none
 ```
 
 A default build carries both, and packaging names what it carries on every run.
 
-What must never be committed is a `link:`. pnpm resolves it against the declaring manifest, so a clone without the sibling checkouts warns, exits zero, and leaves a dangling symlink — which packaging then carries into the `.app`, where macOS refuses to sign the bundle at all. `check:plugin-pin` fails on one, and CONVENTIONS rule 8 is the same rule. Use `plugins:local ..` to package unreleased plugin work, and `plugins:npm` before committing.
+`plugins:latest` is the whole move when the hub or the mode system publishes a new release: it reads what npm has, refuses anything that is not newer than the current pin, writes the catalog, and then does what `plugins:npm` does. `check:plugin-outdated` is the same reading without the writing. Neither consults a `latest` dist-tag.
+
+What must never be committed is a `link:`. pnpm resolves it against the declaring manifest, so a clone without the sibling checkouts warns, exits zero, and leaves a dangling symlink — which packaging then carries into the `.app`, where macOS refuses to sign the bundle at all. `check:plugin-pin` fails on one, and CONVENTIONS rule 8 is the same rule. Use `plugins:local ..` to package unreleased plugin work, and `plugins:npm` (or `plugins:latest`) before committing.
 
 Packaging is otherwise untroubled by a local bundle: `scripts/bundled-plugins.ts` packs each into a tarball and installs the closure from that, so what ships is real files rather than a symlink. `pnpm pack` runs each package's `prepare`, so those checkouts must be installed. A version pin needs none of that — pnpm resolves it from the registry like anything else.
 
@@ -91,7 +95,7 @@ The third is the one that looks done and is not. The Loader's `baseUrl` is the p
 
 Seeding runs before the runtime starts, once per bundle. A bundle this shell added and the user then took out of `dsh.profile.bundles` stays out — the shell records what it has offered in its own settings file, so a withdrawal is not undone on the next launch. What it does maintain on every launch is the symlink, because replacing the application replaces what it points at; and a bundle that is listed but resolves nowhere is dropped, because that one is fatal to the launcher rather than merely missing.
 
-The hub lists a seeded bundle as not removable, and correctly: it marks a bundle removable only when the profile depends on it, and a seeded bundle is a layer the profile was given rather than a dependency pnpm installed. That is the tier the launcher's own `dsh-base` and `dsh-web-app` sit in — and the right one for a hub, which could otherwise uninstall itself and leave no way to put it back.
+The hub lists a seeded bundle as not removable, and correctly: it marks a bundle removable only when the profile depends on it, and a seeded bundle is a layer the profile was given rather than a dependency pnpm installed. That is the tier the launcher's own `dsh-base` and `dsh-web-app` sit in. The hub and the mode system stay in that tier even after an Update writes them as a real dependency — one could otherwise uninstall itself and leave no way to put plugins back, the other is the peer nothing auto-installs.
 
 The profile itself is not written here. When it is absent the launcher is run once with `--dump-default-config`, which resolves the profile and exits — about a third of a second — so this repository carries no copy of the profile template, whose pnpm settings decide how the hub's own installs behave.
 
@@ -155,10 +159,12 @@ pnpm run test               # vitest
 pnpm run check:harness-pin  # the runtime manifest and the catalog name one release
 pnpm run harness:npm        # build against the published release (the default)
 pnpm run harness:local ../../deepseek-harness   # build against a sibling checkout
-pnpm run check:plugin-pin   # the runtime manifest is in a state a bare clone can install
-pnpm run plugins:npm        # ship the published bundles (the default)
-pnpm run plugins:local ..   # ship the sibling checkouts instead
-pnpm run plugins:none       # ship none
+pnpm run check:plugin-pin         # the runtime manifest is in a state a bare clone can install
+pnpm run check:plugin-outdated    # fail when npm has a newer hub or mode-system release
+pnpm run plugins:latest           # move the pins to those releases
+pnpm run plugins:npm              # ship the catalogued published versions (the default)
+pnpm run plugins:local ..         # ship the sibling checkouts instead
+pnpm run plugins:none             # ship none
 pnpm run package:desktop    # the full artifact
 pnpm run clean              # remove app/lib, dist-desktop, and the tsbuildinfo files
 ```

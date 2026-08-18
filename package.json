@@ -25,7 +25,9 @@
     "check:harness-pin": "tsx scripts/harness-source.ts --check",
     "plugins:local": "tsx scripts/plugin-source.ts --local",
     "plugins:npm": "tsx scripts/plugin-source.ts --npm",
+    "plugins:latest": "tsx scripts/plugin-source.ts --latest",
     "plugins:none": "tsx scripts/plugin-source.ts --none",
+    "check:plugin-outdated": "tsx scripts/plugin-source.ts --outdated",
     "check:plugin-pin": "tsx scripts/plugin-source.ts --check",
     "clean": "rm -rf app/lib dist-desktop *.tsbuildinfo"
   },
