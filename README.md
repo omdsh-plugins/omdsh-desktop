@@ -10,8 +10,8 @@ The shell is not part of the harness. It spawns the runtime as a child process a
 
 | Platform | Installer |
 |---|---|
-| **macOS 13+, Apple silicon** | [DeepSeek-Harness-0.1.0-rc.7-arm64.dmg](https://github.com/omdsh-plugins/omdsh-desktop/releases/download/v0.1.0-rc.7/DeepSeek-Harness-0.1.0-rc.7-arm64.dmg) · 208 MB |
-| **Windows x64** | [DeepSeek-Harness-0.1.0-rc.7-x64-setup.exe](https://github.com/omdsh-plugins/omdsh-desktop/releases/download/v0.1.0-rc.7/DeepSeek-Harness-0.1.0-rc.7-x64-setup.exe) · 131 MB |
+| **macOS 13+, Apple silicon** | [DeepSeek-Harness-0.1.0-rc.8-arm64.dmg](https://github.com/omdsh-plugins/omdsh-desktop/releases/download/v0.1.0-rc.8/DeepSeek-Harness-0.1.0-rc.8-arm64.dmg) · 213 MB |
+| **Windows x64** | [DeepSeek-Harness-0.1.0-rc.8-x64-setup.exe](https://github.com/omdsh-plugins/omdsh-desktop/releases/download/v0.1.0-rc.8/DeepSeek-Harness-0.1.0-rc.8-x64-setup.exe) · 132 MB |
 
 Those two links are pinned to one build; **[the releases page](https://github.com/omdsh-plugins/omdsh-desktop/releases/latest)** always has the newest. Nothing else is needed on the machine — the harness runtime, the plugin hub and the mode system are inside the installer.
 
@@ -30,7 +30,7 @@ Neither installer is signed with a paid developer certificate, so the system sto
 
 ## The harness release it ships
 
-Three files name it and they name the same one, `0.1.0-rc.7` today — the third being the application's own version, because the artifact's name is what tells somebody which runtime is inside it. `runtime/package.json` is what the packaging pipeline installs: it is a deploy root outside the workspace, where a `catalog:` reference would have nothing to resolve against, so it restates the version literally. `pnpm-workspace.yaml`'s catalog is what `app` resolves its API client from. `pnpm run check:harness-pin` is the proof that the two agree — and it fails while either one is on a `link:`.
+Three files name it and they name the same one, `0.1.0-rc.8` today — the third being the application's own version, because the artifact's name is what tells somebody which runtime is inside it. `runtime/package.json` is what the packaging pipeline installs: it is a deploy root outside the workspace, where a `catalog:` reference would have nothing to resolve against, so it restates the version literally. `pnpm-workspace.yaml`'s catalog is what `app` resolves its API client from. `pnpm run check:harness-pin` is the proof that the two agree — and it fails while either one is on a `link:`.
 
 The workspace installs that release under `runtime/`, so a checkout run supervises the same runtime a packaged one embeds — which is what makes running from source representative. Packaging reads the same file.
 
@@ -44,7 +44,7 @@ pnpm run harness:local ../../deepseek-harness   # build against a sibling checko
 
 `harness:latest` is the whole move when the harness publishes a new release: it reads what the registry has, refuses anything that is not newer than the current pin, requires the API client to publish the SAME release, writes both catalog entries, and then does what `harness:npm` does. `check:harness-outdated` is the same reading without the writing, so a scheduled job can say a release is waiting.
 
-Neither consults a `latest` dist-tag, and that is not caution for its own sake: `@deepseek-ai/dsh-host-apiproxy` publishes `0.1.0-rc.7` while its `latest` still points at `0.0.1-rc.1`, so a command that trusted the tag would have answered that this application must move its API client back a minor version.
+Neither consults a `latest` dist-tag, and that is not caution for its own sake: `@deepseek-ai/dsh-host-apiproxy` publishes `0.1.0-rc.8` while its `latest` still points at `0.0.1-rc.1`, so a command that trusted the tag would have answered that this application must move its API client back a minor version.
 
 `harness:npm` sets `package.json` and `app/package.json` to the release it points at, and `check:harness-pin` fails when they drift — so moving to a new harness is one command rather than one command plus a manifest edit somebody has to remember. A rebuild of the SAME release is named `<release>+<n>`: semver ignores build metadata for precedence, which is right, because such a build is not a newer release.
 
@@ -62,7 +62,7 @@ The cost is real and worth naming: a shared library in the installer is pinned t
 
 Everything past these two is a plugin the hub can install, and the reasoning above is what a third would have to earn.
 
-Which bundles ship is declared as the `@omdsh-plugins/*` entries of the catalog, and `runtime/package.json` must name all of them at the same version — `omdsh-basemode` at `0.2.2` and `omdsh-plughub` at `0.2.4` today. Two files, for the reason the harness release is also stated twice: the closure installs outside this workspace, where a `catalog:` reference has nothing to resolve against. Those versions are npm releases, so a clone of this repository alone can package: `pnpm install && pnpm run build && pnpm run package:desktop` fetches them from the registry like the harness itself.
+Which bundles ship is declared as the `@omdsh-plugins/*` entries of the catalog, and `runtime/package.json` must name all of them at the same version — `omdsh-basemode` at `0.2.3` and `omdsh-plughub` at `0.2.5` today. Two files, for the reason the harness release is also stated twice: the closure installs outside this workspace, where a `catalog:` reference has nothing to resolve against. Those versions are npm releases, so a clone of this repository alone can package: `pnpm install && pnpm run build && pnpm run package:desktop` fetches them from the registry like the harness itself.
 
 ```sh
 pnpm run check:plugin-pin         # the runtime manifest and the catalog name one release

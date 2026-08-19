@@ -5,9 +5,9 @@
   "private": true,
   "type": "module",
   "dependencies": {
-    "@deepseek-ai/dsh": "0.1.0-rc.7",
+    "@deepseek-ai/dsh": "0.1.0-rc.8",
     "pnpm": "11.21.0",
-    "@omdsh-plugins/omdsh-plughub": "0.2.4",
-    "@omdsh-plugins/omdsh-basemode": "0.2.2"
+    "@omdsh-plugins/omdsh-plughub": "0.2.5",
+    "@omdsh-plugins/omdsh-basemode": "0.2.3"
   }
 }

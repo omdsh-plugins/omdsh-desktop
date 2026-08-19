@@ -3,15 +3,15 @@
 # outside this workspace, where a catalog reference has nothing to resolve
 # against; `pnpm run check:harness-pin` proves the two agree.
 catalog:
-  '@deepseek-ai/dsh': 0.1.0-rc.7
-  '@deepseek-ai/dsh-host-apiproxy': 0.1.0-rc.7
+  '@deepseek-ai/dsh': 0.1.0-rc.8
+  '@deepseek-ai/dsh-host-apiproxy': 0.1.0-rc.8
   # The bundles the installer carries, declared here and restated literally in
   # `runtime/package.json` for the same reason the harness release is: the
   # packaging pipeline installs that manifest's closure outside this workspace,
   # where a `catalog:` reference has nothing to resolve against.
   # `pnpm run check:plugin-pin` proves the two agree.
-  '@omdsh-plugins/omdsh-basemode': 0.2.2
-  '@omdsh-plugins/omdsh-plughub': 0.2.4
+  '@omdsh-plugins/omdsh-basemode': 0.2.3
+  '@omdsh-plugins/omdsh-plughub': 0.2.5
 
 packages:
   - app
@@ -49,4 +49,4 @@ allowBuilds:
 minimumReleaseAge: 0
 
 patchedDependencies:
-  '@deepseek-ai/dsh-host-directory-picker-native@0.1.0-rc.7': patches/@deepseek-ai__dsh-host-directory-picker-native@0.1.0-rc.7.patch
+  '@deepseek-ai/dsh-host-directory-picker-native@0.1.0-rc.8': patches/@deepseek-ai__dsh-host-directory-picker-native@0.1.0-rc.8.patch
