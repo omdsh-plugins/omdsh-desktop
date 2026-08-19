@@ -5,11 +5,11 @@
  * no patch layer.
  */
 
-import { mkdirSync, mkdtempSync, readFileSync, readlinkSync, rmSync, statSync, symlinkSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, readlinkSync, rmSync, statSync, symlinkSync, writeFileSync } from 'node:fs'
 import { homedir, tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
-import { discoverBundledPlugins, resolveHome, seedBundledPlugins } from '../src/bundled-plugins.ts'
+import { discoverBundledPlugins, resetInstalledPlugins, resolveHome, seedBundledPlugins } from '../src/bundled-plugins.ts'
 import { RUNTIME_PROFILE } from '../src/runtime-launch.ts'
 
 const HUB = '@omdsh-plugins/omdsh-plughub'
@@ -364,5 +364,60 @@ describe('seedBundledPlugins', () => {
 
     expect(outcome).toEqual({ offered: [], changed: false })
     expect(readFileSync(manifestPath, 'utf8')).toBe('{ not json')
+  })
+})
+
+describe('resetInstalledPlugins', () => {
+  it('removes profiles and leaves settings, credentials, and sessions', () => {
+    const root = scratch()
+    const dshHome = home(root, [HUB], { dependencies: { [HUB]: '0.2.0' } })
+    writeFileSync(join(dshHome, 'settings.yaml'), 'locale: { preference: zh }\n')
+    writeFileSync(join(dshHome, '.credentials.yaml'), 'token: keep\n')
+    mkdirSync(join(dshHome, 'sessions', 'one'), { recursive: true })
+    writeFileSync(join(dshHome, 'sessions', 'one', 'session.json'), '{}\n')
+    const messages: string[] = []
+
+    const outcome = resetInstalledPlugins({ home: dshHome, log: message => messages.push(message) })
+
+    expect(outcome).toEqual({ reset: true, ok: true })
+    expect(existsSync(join(dshHome, 'profiles'))).toBe(false)
+    expect(readFileSync(join(dshHome, 'settings.yaml'), 'utf8')).toBe('locale: { preference: zh }\n')
+    expect(readFileSync(join(dshHome, '.credentials.yaml'), 'utf8')).toBe('token: keep\n')
+    expect(readFileSync(join(dshHome, 'sessions', 'one', 'session.json'), 'utf8')).toBe('{}\n')
+    expect(messages.join('')).toContain('cleared installed profile plugins')
+  })
+
+  it('is a no-op when the home has never held a profile', () => {
+    const dshHome = join(scratch(), 'dsh')
+    mkdirSync(dshHome, { recursive: true })
+    const messages: string[] = []
+
+    expect(resetInstalledPlugins({ home: dshHome, log: message => messages.push(message) }))
+      .toEqual({ reset: false, ok: true })
+    expect(messages.join('')).toContain('no installed profile plugins')
+  })
+
+  it('lets seeding initialize a fresh profile after the leftover is gone', async () => {
+    const root = scratch()
+    const runtimeRoot = closure(root)
+    const dshHome = home(root, [HUB], { dependencies: { leftover: '1.0.0' } })
+
+    expect(resetInstalledPlugins({ home: dshHome, log: () => {} }).ok).toBe(true)
+
+    const outcome = await seed({
+      runtimeRoot,
+      home: dshHome,
+      initProfile: () => {
+        home(root, [])
+        return Promise.resolve()
+      },
+    })
+
+    expect(outcome.changed).toBe(true)
+    expect(listed(dshHome)).toEqual([HUB])
+    const manifest = JSON.parse(
+      readFileSync(join(dshHome, 'profiles', RUNTIME_PROFILE, 'package.json'), 'utf8'),
+    ) as { dependencies?: Record<string, unknown> }
+    expect(manifest.dependencies).toBeUndefined()
   })
 })

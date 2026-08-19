@@ -96,4 +96,29 @@ describe('SettingsStore', () => {
     expect(new SettingsStore(join(directory, 'mixed.json')).readOfferedBundles())
       .toEqual(['@omdsh-plugins/omdsh-plughub'])
   })
+
+  it('has prepared the home for no packaged release yet', () => {
+    expect(new SettingsStore(path).readSeededRelease()).toBe('')
+  })
+
+  it('remembers the packaged version that last prepared the home', () => {
+    const store = new SettingsStore(path)
+    store.writeSeededRelease('0.1.0-rc.7')
+    expect(new SettingsStore(path).readSeededRelease()).toBe('0.1.0-rc.7')
+  })
+
+  it('treats a missing or damaged release as none, so a new installer still clears leftover plugins', async () => {
+    await writeFile(join(directory, 'bad-release.json'), '{"seededRelease":1}')
+    expect(new SettingsStore(join(directory, 'bad-release.json')).readSeededRelease()).toBe('')
+  })
+
+  it('keeps the other preferences when the packaged version is recorded', () => {
+    const store = new SettingsStore(path)
+    store.writeIdleSuspend(false)
+    store.writeOfferedBundles(['@omdsh-plugins/omdsh-plughub'])
+    store.writeSeededRelease('0.1.0-rc.7')
+    expect(store.readIdleSuspend()).toBe(false)
+    expect(store.readOfferedBundles()).toEqual(['@omdsh-plugins/omdsh-plughub'])
+    expect(store.readSeededRelease()).toBe('0.1.0-rc.7')
+  })
 })

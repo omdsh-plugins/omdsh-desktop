@@ -79,6 +79,28 @@ export class SettingsStore {
     this.write({ ...this.read(), offeredBundles: [...names] })
   }
 
+  /**
+   * The packaged application version this shell last prepared the harness
+   * home for.
+   *
+   * Empty when no packaged launch has recorded one yet, which a new installer
+   * treats as a home it has not prepared — leftover profile plugins from a
+   * previous application, or from `dsh` on the same machine, still have to
+   * be dropped before this runtime composes them.
+   * @returns the stored version string, or nothing.
+   */
+  readSeededRelease(): string {
+    const stored = this.read().seededRelease
+    return typeof stored === 'string' ? stored : ''
+  }
+
+  /**
+   * Remember which packaged version last prepared the harness home.
+   * @param release - `app.getVersion()` of the application that just did so.
+   */
+  writeSeededRelease(release: string): void {
+    this.write({ ...this.read(), seededRelease: release })
+  }
 
   /**
    * The stored document, parsed once.

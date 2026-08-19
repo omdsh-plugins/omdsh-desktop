@@ -36,7 +36,7 @@ import {
   needsLoginEnvironment,
   readLoginShellEnvironment,
 } from './login-environment.ts'
-import { resolveHome, seedBundledPlugins } from './bundled-plugins.ts'
+import { resetInstalledPlugins, resolveHome, seedBundledPlugins } from './bundled-plugins.ts'
 import { resolveRuntimeEntry, resolveRuntimeRoot } from './paths.ts'
 import {
   decideResourceAction,
@@ -205,16 +205,24 @@ class DesktopApplication {
    * Offer the bundles this application ships to the profile it is about to
    * boot.
    *
+   * A packaged application whose version this shell has not prepared the
+   * home for drops leftover profile plugins first: they compose at boot, and
+   * a runtime they were not built for will refuse to start. Settings and
+   * credentials stay. A checkout run skips that, because replacing `app/lib`
+   * is not installing an application.
+   *
    * Nothing here is allowed to stop the application. The seeding module
    * reports its own refusals; this method's own failure mode is the profile
    * initialization below, which is a child process and can fail for reasons
    * that have nothing to do with plugins.
    */
   private async seedProfile(): Promise<void> {
+    const home = resolveHome(this.launchEnvironment)
     try {
+      this.prepareHomeForRelease(home)
       const outcome = await seedBundledPlugins({
         runtimeRoot: this.runtimeRoot,
-        home: resolveHome(this.launchEnvironment),
+        home,
         offered: this.settings.readOfferedBundles(),
         initProfile: () => this.initProfile(),
         log: message => { this.log.write(message) },
@@ -223,6 +231,28 @@ class DesktopApplication {
     } catch (error) {
       this.log.write(`desktop: seeding the profile failed: ${String(error)}\n`)
     }
+  }
+
+  /**
+   * On a packaged launch whose version is new to this home, drop installed
+   * profile plugins so they cannot compose against this runtime.
+   *
+   * Recording the version is what makes the next launch of the SAME installer
+   * leave whatever the hub then writes. A failure to delete is not recorded,
+   * so the next start tries again rather than composing the leftover.
+   * @param home - the Harness home this launch will boot against.
+   */
+  private prepareHomeForRelease(home: string): void {
+    if (!app.isPackaged) return
+    const release = app.getVersion()
+    if (this.settings.readSeededRelease() === release) return
+    const outcome = resetInstalledPlugins({
+      home,
+      log: message => { this.log.write(message) },
+    })
+    if (!outcome.ok) return
+    this.settings.writeOfferedBundles([])
+    this.settings.writeSeededRelease(release)
   }
 
   /**

@@ -39,10 +39,21 @@
  * re-point the fallback symlink at the shipped tree or the next launch would
  * undo the update. The symlink is maintained only while the profile does not
  * already depend on the name.
+ *
+ * ## A new installer does not inherit the last one's plugins
+ *
+ * Hub-installed plugins live in `$DSH_HOME/profiles` and compose at boot. An
+ * installer that replaced the runtime without replacing those packages would
+ * load them against a harness they were not built for, and the launcher would
+ * refuse to start. The first launch of a packaged application whose version
+ * this shell has not prepared the home for deletes that directory and then
+ * seeds; settings, credentials, sessions, and everything else in the home
+ * stay. Later launches of the same version leave whatever the hub then
+ * installs. A checkout run never does this.
  * @module @omdsh-plugins/omdsh-desktop/bundled-plugins
  */
 
-import { existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, readlinkSync, symlinkSync, unlinkSync, writeFileSync } from 'node:fs'
+import { existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, readlinkSync, rmSync, symlinkSync, unlinkSync, writeFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { RUNTIME_PROFILE } from './runtime-launch.ts'
@@ -100,6 +111,51 @@ const MANIFEST_FILENAME = 'package.json'
 
 /** Environment variable that overrides the default Harness home. */
 export const DSH_HOME_ENV = 'DSH_HOME'
+
+/** What one attempt to drop leftover profile plugins concluded. */
+export interface ResetOutcome {
+  /** Whether `$DSH_HOME/profiles` was present and removed. */
+  readonly reset: boolean
+  /** Whether the home is now safe to seed; false means the next launch should try again. */
+  readonly ok: boolean
+}
+
+/**
+ * Drop every installed profile — the plugins a previous installer or the hub
+ * wrote into the home — so a new packaged application does not compose them.
+ *
+ * The rest of the home is left exactly as it is: settings, credentials,
+ * sessions, and cached files do not go on the launcher's bundle list.
+ * Fail-soft: a home this process cannot delete is reported rather than
+ * thrown, because refusing to start would trade the whole application for
+ * a directory it failed to remove.
+ * @param options - the Harness home and a diagnostic sink.
+ * @param options.home - the Harness home whose `profiles` directory is removed.
+ * @param options.log - diagnostic sink.
+ * @returns whether anything was removed, and whether seeding may proceed.
+ */
+export function resetInstalledPlugins(options: {
+  home: string
+  log: (message: string) => void
+}): ResetOutcome {
+  const profiles = join(options.home, PROFILES_DIR)
+  if (!existsSync(profiles)) {
+    options.log('desktop: no installed profile plugins to clear\n')
+    return { reset: false, ok: true }
+  }
+  try {
+    rmSync(profiles, { recursive: true, force: true })
+  } catch (error) {
+    options.log(`desktop: could not clear installed profile plugins: ${String(error)}\n`)
+    return { reset: false, ok: false }
+  }
+  if (existsSync(profiles)) {
+    options.log('desktop: installed profile plugins were still present after clearing; leaving them for the next launch\n')
+    return { reset: false, ok: false }
+  }
+  options.log('desktop: cleared installed profile plugins; settings and credentials were left in place\n')
+  return { reset: true, ok: true }
+}
 
 /**
  * Resolve the Harness home, restating `@deepseek-ai/dsh-home-paths`'s

@@ -10,7 +10,7 @@ The shell is not part of the harness. It spawns the runtime as a child process a
 
 | Platform | Installer |
 |---|---|
-| **macOS 13+, Apple silicon** | [DeepSeek-Harness-0.1.0-rc.7-arm64.dmg](https://github.com/omdsh-plugins/omdsh-desktop/releases/download/v0.1.0-rc.7/DeepSeek-Harness-0.1.0-rc.7-arm64.dmg) · 213 MB |
+| **macOS 13+, Apple silicon** | [DeepSeek-Harness-0.1.0-rc.7-arm64.dmg](https://github.com/omdsh-plugins/omdsh-desktop/releases/download/v0.1.0-rc.7/DeepSeek-Harness-0.1.0-rc.7-arm64.dmg) · 208 MB |
 | **Windows x64** | [DeepSeek-Harness-0.1.0-rc.7-x64-setup.exe](https://github.com/omdsh-plugins/omdsh-desktop/releases/download/v0.1.0-rc.7/DeepSeek-Harness-0.1.0-rc.7-x64-setup.exe) · 131 MB |
 
 Those two links are pinned to one build; **[the releases page](https://github.com/omdsh-plugins/omdsh-desktop/releases/latest)** always has the newest. Nothing else is needed on the machine — the harness runtime, the plugin hub and the mode system are inside the installer.
@@ -96,6 +96,8 @@ The third is the one that looks done and is not. The Loader's `baseUrl` is the p
 Seeding runs before the runtime starts, once per bundle. A bundle this shell added and the user then took out of `dsh.profile.bundles` stays out — the shell records what it has offered in its own settings file, so a withdrawal is not undone on the next launch. What it does maintain on every launch is the symlink, because replacing the application replaces what it points at; and a bundle that is listed but resolves nowhere is dropped, because that one is fatal to the launcher rather than merely missing.
 
 The hub lists a seeded bundle as not removable, and correctly: it marks a bundle removable only when the profile depends on it, and a seeded bundle is a layer the profile was given rather than a dependency pnpm installed. That is the tier the launcher's own `dsh-base` and `dsh-web-app` sit in. The hub and the mode system stay in that tier even after an Update writes them as a real dependency — one could otherwise uninstall itself and leave no way to put plugins back, the other is the peer nothing auto-installs.
+
+The first launch of a packaged application whose version this shell has not prepared the home for deletes `$DSH_HOME/profiles` before it seeds. Hub-installed plugins compose at boot, and a leftover written against a previous runtime will refuse to start rather than degrade. Settings, credentials, sessions, and the rest of the harness home stay: they are not on the launcher's bundle list. Later launches of the same installer leave whatever the hub then writes, so a plugin installed after that first start is still there in the morning. A checkout run never does this, because replacing `app/lib` is not installing an application.
 
 The profile itself is not written here. When it is absent the launcher is run once with `--dump-default-config`, which resolves the profile and exits — about a third of a second — so this repository carries no copy of the profile template, whose pnpm settings decide how the hub's own installs behave.
 
@@ -198,4 +200,5 @@ The repository's own limits; [`app/README.md`](app/README.md#known-limitations) 
 - **The runtime serves on loopback with an OS-assigned port and no authentication**, which is the posture `dsh web` already has: any process running as the same user can reach the API.
 - **No CI gate covers the application.** Packaging needs macOS or Windows and exercising the shell needs a windowing session, so a same-machine packaging run's boot smoke is what proves the closure it ships.
 - **Closing the last window quits on Windows and stops the runtime**; on macOS it does not, and the Dock tile stays.
+- **A new packaged version drops hub-installed plugins.** The first launch after the version changes deletes `$DSH_HOME/profiles` so a leftover that cannot load against this runtime cannot take the boot down. Settings, credentials, and sessions stay; the hub is what puts plugins back. A checkout run does not do this, and later launches of the same version leave what the hub then installs.
 - **Running from source needs a build first, and a lock of its own.** There is no `dev` script and no watch mode, and an unmodified checkout run cannot start beside an installed copy — both are `## Install`'s problem to work around rather than something this repository solves.

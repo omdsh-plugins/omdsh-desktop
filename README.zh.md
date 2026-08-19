@@ -10,7 +10,7 @@
 
 | 平台 | 安装包 |
 |---|---|
-| **macOS 13 及以上，Apple 芯片** | [DeepSeek-Harness-0.1.0-rc.7-arm64.dmg](https://github.com/omdsh-plugins/omdsh-desktop/releases/download/v0.1.0-rc.7/DeepSeek-Harness-0.1.0-rc.7-arm64.dmg) · 213 MB |
+| **macOS 13 及以上，Apple 芯片** | [DeepSeek-Harness-0.1.0-rc.7-arm64.dmg](https://github.com/omdsh-plugins/omdsh-desktop/releases/download/v0.1.0-rc.7/DeepSeek-Harness-0.1.0-rc.7-arm64.dmg) · 208 MB |
 | **Windows 64 位** | [DeepSeek-Harness-0.1.0-rc.7-x64-setup.exe](https://github.com/omdsh-plugins/omdsh-desktop/releases/download/v0.1.0-rc.7/DeepSeek-Harness-0.1.0-rc.7-x64-setup.exe) · 131 MB |
 
 上面两个链接锁定的是某一次构建；**[发布页](https://github.com/omdsh-plugins/omdsh-desktop/releases/latest)** 上永远是最新的那一版。机器上不需要再装别的——harness 运行时、插件中心、模式系统都在安装包里。
@@ -96,6 +96,8 @@ pnpm run plugins:none             # 一个都不带
 seeding 在运行时启动之前跑，每个 bundle 只提供一次。外壳加过、而用户又从 `dsh.profile.bundles` 里拿掉的 bundle，会一直保持拿掉的状态——外壳把"自己提供过什么"记在它自己的设置文件里，所以这次撤除不会在下次启动时被推翻。它每次启动都会维护的是那条软链，因为换掉应用就是换掉链所指的东西；而一个被列出、却哪里都解析不到的 bundle 会被摘掉，因为那一种对启动器是致命的，不只是缺失。
 
 hub 会把一个被 seed 进来的 bundle 标成不可移除，而这是对的：它判定可移除的标准是"profile 是否依赖它"，而一个被 seed 的 bundle 是 profile 被给予的一层，不是 pnpm 装进来的一条依赖。那正是启动器自带的 `dsh-base` 和 `dsh-web-app` 所在的那一档。插件中心和模式系统在 Update 把它们写成真实依赖之后仍留在这一档——前者否则可以把自己卸掉、不留任何装回来的办法，后者是那个没人会自动装上的 peer。
+
+打包应用换了一个这个外壳还没为这个 home 准备过的版本时，第一次启动会在 seeding 之前删掉 `$DSH_HOME/profiles`。通过 hub 装上的插件会在启动时被组合进去，一份对着上一个运行时写下的残留不会降级，而是直接拒绝启动。设置、凭证、会话，以及 harness home 里其余的东西都留着：它们不在启动器的 bundle 列表上。同一个安装包之后的启动不会再动 hub 随后写入的内容，所以那次首次启动之后装上的插件第二天还在。从检出运行永远不会做这件事，因为替换 `app/lib` 并不是在安装一个应用。
 
 profile 本身不由这里写。它不存在时，启动器会被以 `--dump-default-config` 跑一次，那会解析 profile 然后退出——大约三分之一秒——所以这个仓库不必自带一份 profile 模板的副本，而那份模板里的 pnpm 设置，恰恰决定了 hub 自己的安装行为。
 
@@ -190,4 +192,5 @@ pnpm run package:desktop -- --skip-deploy --skip-smoke --skip-dmg --skip-install
 - **运行时在本地回环上以操作系统分配的端口提供服务，且没有认证**，这与 `dsh web` 已有的姿态一致：任何以同一用户身份运行的进程都能触及那个 API。
 - **没有 CI 门禁覆盖这个应用。** 打包需要 macOS 或 Windows，驱动外壳需要一个窗口会话，所以本机打包时那次引导冒烟，就是它所交付闭包的全部证明。
 - **在 Windows 上关掉最后一个窗口会退出应用并停掉运行时**；在 macOS 上不会，Dock 图标还留着。
+- **新的打包版本会清掉通过 hub 装上的插件。** 版本号变了之后的第一次启动会删掉 `$DSH_HOME/profiles`，这样一份对着当前运行时加载不了的残留就不会把引导拖死。设置、凭证和会话留着；把插件装回来的是 hub。从检出运行不会做这件事，同一个版本之后的启动也不会动 hub 随后装上的东西。
 - **从源码运行要先构建，而且要有自己的锁。** 这里没有 `dev` 脚本也没有 watch 模式，而且一次未加处理的检出运行没法和已安装的那一份并存——这两件都是 `## 安装` 里绕开的问题，不是这个仓库解决掉的问题。
