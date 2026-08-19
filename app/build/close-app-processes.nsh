@@ -25,6 +25,13 @@
 # `taskkill /T` still terminates each image-name match together with its
 # children, so a live shell goes down with the runtime and the shells it
 # started, and nothing survives to restart anything.
+#
+# The same include also removes the default Harness profile after application
+# files have been installed and before the installer offers to launch them.
+# Everything the plugin hub installs lives under `~/.dsh/profiles`; settings,
+# credentials, sessions, and every other sibling in `~/.dsh` stay untouched.
+# The packaged shell repeats this check on its first launch for a new release,
+# which covers a custom DSH_HOME and gives a failed installer cleanup a retry.
 
 # Passes before the installer reports that it cannot close the application.
 !define DSH_CLOSE_ATTEMPTS 20
@@ -105,4 +112,19 @@
       Quit
     ${endIf}
   ${Loop}
+!macroend
+
+# Drop plugins left by an older runtime during every Windows install, including
+# a same-version repair/overwrite install. PowerShell removes directory
+# junctions without walking into their targets, which matters because the
+# profile module fallback contains junctions into this installation.
+!macro customInstall
+  DetailPrint "Clearing plugins installed by an earlier DeepSeek Harness version..."
+  nsExec::Exec `"$PowerShellPath" -NoProfile -NonInteractive -Command "$$profiles=[IO.Path]::Combine([Environment]::GetFolderPath('UserProfile'),'.dsh','profiles'); if (Test-Path -LiteralPath $$profiles) { Remove-Item -LiteralPath $$profiles -Recurse -Force -ErrorAction Stop }"`
+  Pop $R0
+  ${if} $R0 == 0
+    DetailPrint "Old profile plugins cleared; settings and credentials were preserved."
+  ${else}
+    DetailPrint "Old profile plugins could not be cleared by setup; the application will retry before startup."
+  ${endIf}
 !macroend

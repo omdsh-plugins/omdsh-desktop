@@ -83,5 +83,6 @@ harness 窗口是本外壳并不扩展的网页内容，因此菜单未占用的
 - 该 macOS 包是即席（ad-hoc）签名而非公证：拷贝到另一台机器时需要 `xattr -dr com.apple.quarantine <app>`。Windows 安装程序未签名；SmartScreen 会警告。
 - 没有 CI 门禁覆盖该应用。打包需要 macOS 或 Windows，驱动外壳需要窗口会话；本机打包运行自身的引导冒烟测试才是它所交付闭包的证明。在 macOS 上构建的 Windows 安装程序未经冒烟。
 - NSIS 安装程序用 [`build/close-app-processes.nsh`](build/close-app-processes.nsh) 替换 electron-builder 对"应用是否在运行"的检测，因为运行时与外壳共用可执行文件，且它重启自身的速度快过默认检测放弃的速度。macOS 构建主机只能证明该脚本可以编译；关闭路径需要在 Windows 上对一个正在运行的应用做一次覆盖安装来验证。
+- Windows 安装程序每次安装都会删除默认的 `~/.dsh/profiles`，同版本覆盖安装也一样；`.dsh` 下的其他同级内容完全不动，所以设置、凭证和会话都会保留。打包应用首次启动时的清理仍作为自定义 `$DSH_HOME` 以及安装阶段删除失败时的兜底。
 - 在 Windows 上关闭最后一个窗口会退出应用并停止运行时；在 macOS 上不会。
 - 新的打包版本会清掉通过 hub 装上的插件。版本号变了之后的第一次启动会删掉 `$DSH_HOME/profiles`，这样一份对着当前运行时加载不了的残留就不会把引导拖死。设置、凭证和会话留着；把插件装回来的是 hub。
