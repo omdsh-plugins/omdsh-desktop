@@ -13,7 +13,7 @@ macOS 与 Windows 桌面应用：一个 Electron 外壳，监管一个内嵌的 
 
 | 关注点 | 行为 |
 |---|---|
-| 启动 | [`src/runtime-launch.ts`](src/runtime-launch.ts) 拥有这条命令行。它包含 `--expose-internals`：Electron 无法加载 Cordis 用来触及 Node 内部模块加载器的 `node-addon-require-builtin` 插件，因此缺少该标志时 HMR 服务会拒绝启动并带崩整次引导。 |
+| 启动 | [`src/runtime-launch.ts`](src/runtime-launch.ts) 拥有这条命令行。它包含 `--expose-internals`：Electron 无法加载 Cordis 用来触及 Node 内部模块加载器的 `node-addon-require-builtin` 插件，因此缺少该标志时 HMR 服务会拒绝启动并带崩整次引导。另外还有 `--no-open`：`dsh --profile web` 默认会把地址交给系统浏览器，而外壳自己已经有窗口在显示同一界面。 |
 | 就绪 | 以 `dsh web: <url>` 这一行为准，而不是端口开始应答。[`src/readiness.ts`](src/readiness.ts) 跨数据块边界拼接该行，且只在整行完整时才上报。 |
 | 端口 | `--port 0`，因此外壳绝不会与终端里启动的 `dsh web` 抢占端口。 |
 | 重启 | [`src/restart-policy.ts`](src/restart-policy.ts) 对已正常服务过的运行立即重启，对启动期失败按指数退避，连续五次后停止。会话是持久的，因此一次重启的代价仅是一个进行中的回合。 |

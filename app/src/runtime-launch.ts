@@ -30,6 +30,15 @@ export const RUNTIME_PROFILE = 'web'
 const RUNTIME_PORT = '0'
 
 /**
+ * Keep the runtime from handing its URL to the system browser.
+ *
+ * `dsh --profile web` opens the default browser once the server is up. That
+ * is the right default in a terminal; this shell already owns the window that
+ * shows the same origin, so a second tab would only duplicate it.
+ */
+const RUNTIME_NO_OPEN = '--no-open'
+
+/**
  * Node flags the runtime needs under Electron's Node.
  *
  * Cordis reaches Node's internal ES module loader either through this flag or
@@ -131,6 +140,7 @@ export function localRuntimeLaunch(options: {
       RUNTIME_HOST,
       '--port',
       RUNTIME_PORT,
+      RUNTIME_NO_OPEN,
     ],
     env: RUNTIME_ENV,
     description: 'this machine',

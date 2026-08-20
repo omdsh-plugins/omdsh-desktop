@@ -9,7 +9,14 @@ describe('localRuntimeLaunch', () => {
     expect(launch.command).toBe('/bin/electron')
     expect(launch.args).toContain('/app/dsh.js')
     expect(launch.args).toContain('--max-old-space-size=2048')
-    expect(launch.args.slice(-6)).toEqual(['--profile', 'web', '--host', '127.0.0.1', '--port', '0'])
+    expect(launch.args.slice(-7)).toEqual([
+      '--profile', 'web', '--host', '127.0.0.1', '--port', '0', '--no-open',
+    ])
+  })
+
+  it('keeps the runtime from opening a browser the shell already owns the window for', () => {
+    expect(localRuntimeLaunch({ entry: 'e', nodePath: 'n', maxOldSpaceMb: 1 }).args)
+      .toContain('--no-open')
   })
 
   it('runs it as Node and keeps plugin installs on the pnpm shipped in the closure', () => {

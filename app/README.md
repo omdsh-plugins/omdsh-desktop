@@ -13,7 +13,7 @@ The shell adds no harness capability. It reuses the shipped Web surface verbatim
 
 | Concern | Behavior |
 |---|---|
-| Launch | [`src/runtime-launch.ts`](src/runtime-launch.ts) owns the command line. It includes `--expose-internals`: Electron cannot load the `node-addon-require-builtin` addon Cordis otherwise uses to reach Node's internal module loader, so without that flag the HMR service refuses to start and takes the boot with it. |
+| Launch | [`src/runtime-launch.ts`](src/runtime-launch.ts) owns the command line. It includes `--expose-internals`: Electron cannot load the `node-addon-require-builtin` addon Cordis otherwise uses to reach Node's internal module loader, so without that flag the HMR service refuses to start and takes the boot with it. It also passes `--no-open`: `dsh --profile web` would otherwise hand the URL to the system browser, and this shell already owns the window that shows it. |
 | Readiness | The `dsh web: <url>` line, not the port answering. [`src/readiness.ts`](src/readiness.ts) joins it across chunk boundaries and only reports a complete line. |
 | Port | `--port 0`, so the shell never collides with a `dsh web` started in a terminal. |
 | Restart | [`src/restart-policy.ts`](src/restart-policy.ts) restarts a served run at once, backs off exponentially through startup failures, and stops after five in a row. Sessions are durable, so a restart costs an in-flight turn and nothing else. |
