@@ -4,7 +4,7 @@
 
 macOS 与 Windows 桌面应用：一个 Electron 外壳，监管一个内嵌的 `dsh --profile web` 运行时，并在原生窗口中呈现它。它以未签名 `.dmg`（macOS）或 NSIS `.exe`（Windows）交付，由 [`scripts/package-desktop-app.ts`](../scripts/package-desktop-app.ts) 构建，且自包含——Electron 运行时、harness 依赖闭包与已构建的前端全部位于包内，因此安装后的应用不需要代码检出、不需要 Node 安装，也不需要包管理器。决策记录见 harness fork 的 `legacy/all-in-one` 分支上的 Agent Note `2026-08-13-electron-desktop-application`。
 
-外壳不新增任何 harness 能力。它通过运行时的本地回环服务器原样复用已发布的 Web 界面，只拥有浏览器标签页无法承担的部分：进程监管、用户的 shell 环境、原生窗口与菜单行为、提醒信号、以及一套内存策略。
+外壳不新增任何 harness 能力。它通过运行时的本地回环服务器原样复用已发布的 Web 界面，只拥有浏览器标签页无法承担的部分：进程监管、用户的 shell 环境、原生窗口与菜单行为、提醒信号、以及一套内存策略。这个产品以后会长出来的其他一切，都归运行时以插件的形式加载——这正是外壳自己一种能力都不认识的原因。
 
 
 ## 运行时进程
